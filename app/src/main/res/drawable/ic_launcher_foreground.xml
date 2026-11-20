@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 2x2 squircle grid, kept inside the 66dp adaptive-icon safe zone -->
+    <!-- Top-left: solid cyan -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M37,30H45Q52,30 52,37V45Q52,52 45,52H37Q30,52 30,45V37Q30,30 37,30Z" />
+    <!-- Top-right -->
+    <path
+        android:fillColor="#9900E5FF"
+        android:pathData="M63,30H71Q78,30 78,37V45Q78,52 71,52H63Q56,52 56,45V37Q56,30 63,30Z" />
+    <!-- Bottom-left -->
+    <path
+        android:fillColor="#9900E5FF"
+        android:pathData="M37,56H45Q52,56 52,63V71Q52,78 45,78H37Q30,78 30,71V63Q30,56 37,56Z" />
+    <!-- Bottom-right -->
+    <path
+        android:fillColor="#55FFFFFF"
+        android:pathData="M63,56H71Q78,56 78,63V71Q78,78 71,78H63Q56,78 56,71V63Q56,56 63,56Z" />
+</vector>
