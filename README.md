@@ -74,8 +74,16 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## ⚙️ CI/CD (GitHub Actions)
 
 Repositori ini dilengkapi dengan pipeline otomatis:
-- **CI (`build.yml`)**: Berjalan di setiap `push` dan `pull_request` pada branch `main` untuk menjalankan Lint dan mengompilasi APK Debug.
-- **CD (`release.yml`)**: Berjalan otomatis saat ada tag versi baru (misal `v1.0.0`) untuk mengompilasi Release/Debug APK dan mempublikasikannya ke **GitHub Releases**.
+- **CI (`.github/workflows/ci.yml`)**: Berjalan di setiap `push` dan `pull_request` pada branch `main` untuk menjalankan Unit Tests dan mengompilasi APK Debug.
+- **CD (`.github/workflows/cd.yml`)**: Berjalan otomatis saat ada tag versi baru (misal `v1.0.0`) atau lewat manual trigger (*workflow_dispatch*):
+  - Menggunakan Environment GitHub: `ANDROID_ENV` dengan Secret `ANDROID_APP_SECRET`.
+  - Otomatis men-generate Keystore bersertifikat resmi 10 tahun (3650 hari) atas nama **The Five Zombie Org** (*Team Zombie*).
+  - Melakukan signing resmi untuk:
+    - 📦 **`.aab`** (Android App Bundle resmi untuk Google Play Store).
+    - 📱 **`-release.apk`** (Release APK bertanda tangan resmi).
+    - 🧪 **`-debug.apk`** (Testing APK).
+    - 🔐 **`SHA256SUMS.txt`** (Checksum integritas berkas).
+  - Otomatis mempublikasikan seluruh berkas tersebut langsung ke **GitHub Releases**.
 
 ---
 
