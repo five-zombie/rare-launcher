@@ -10,11 +10,14 @@ android {
     }
 
     defaultConfig {
+        val appVersionName = providers.gradleProperty("appVersionName").orElse("0.1.0").get()
+        val appVersionCode = providers.gradleProperty("appVersionCode").map { it.toInt() }.orElse(1).get()
+
         applicationId = "io.github.rachmanzz.rarelauncer"
         minSdk = 28
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

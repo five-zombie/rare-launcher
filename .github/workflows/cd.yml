@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: 'Release Version Name (e.g. v1.0.0)'
-        required: false
-        default: 'v1.0.0'
+        description: 'Release Tag Name (e.g. v0.1.0-rc or v1.0.0)'
+        required: true
+        default: 'v0.1.0-rc'
 
 jobs:
   release:
@@ -22,6 +22,35 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine Release Metadata
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG_NAME="${{ github.event.inputs.version_name }}"
+          else
+            TAG_NAME="${{ github.ref_name }}"
+          fi
+
+          APP_VERSION="${TAG_NAME#v}"
+          VERSION_CODE=$(git rev-list --count HEAD)
+
+          if echo "$TAG_NAME" | grep -qiE '-(rc|alpha|beta)'; then
+            IS_PRERELEASE="true"
+          else
+            IS_PRERELEASE="false"
+          fi
+
+          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+
+          echo "Release Tag: $TAG_NAME"
+          echo "App versionName: $APP_VERSION (versionCode: $VERSION_CODE)"
+          echo "Pre-release: $IS_PRERELEASE"
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -34,7 +63,10 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Release Bundle (AAB) & APKs
-        run: ./gradlew bundleRelease assembleRelease assembleDebug
+        run: |
+          ./gradlew bundleRelease assembleRelease assembleDebug \
+            -PappVersionName="${{ steps.meta.outputs.version }}" \
+            -PappVersionCode="${{ steps.meta.outputs.version_code }}"
 
       - name: Generate Keystore & Sign Release Artifacts
         env:
@@ -42,7 +74,7 @@ jobs:
         run: |
           # Use provided secret or fallback to default secure key for local runs
           PASS="${KEYSTORE_PASSWORD:-rare_launcher_secret_2026}"
-          
+
           # Generate signing keystore valid for 10 years (3650 days)
           keytool -genkeypair -v \
             -keystore release.keystore \
@@ -54,17 +86,15 @@ jobs:
             -keypass "$PASS" \
             -dname "CN=Team Zombie, OU=Team Zombie, O=The Five Zombie Org, L=Jakarta, ST=DKI Jakarta, C=ID"
 
-          # Locate Android build-tools apksigner and jarsigner
+          # Locate Android build-tools apksigner and zipalign
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
-          
-          # Prepare release asset directory
-          TAG_NAME="${{ github.ref_name }}"
-          VERSION="${TAG_NAME:-${{ github.event.inputs.version_name }}}"
+
+          TAG_NAME="${{ steps.meta.outputs.tag }}"
           mkdir -p release_assets
 
-          # 1. Sign & Align Release AAB (Android App Bundle for Google Play)
+          # 1. Sign Release AAB (Android App Bundle for Google Play)
           AAB_UNSIGNED="app/build/outputs/bundle/release/app-release.aab"
-          AAB_SIGNED="release_assets/RareLauncer-${VERSION}.aab"
+          AAB_SIGNED="release_assets/RareLauncer-${TAG_NAME}.aab"
           if [ -f "$AAB_UNSIGNED" ]; then
             cp "$AAB_UNSIGNED" "$AAB_SIGNED"
             jarsigner -keystore release.keystore \
@@ -74,24 +104,26 @@ jobs:
             echo "Successfully signed AAB: $AAB_SIGNED"
           fi
 
-          # 2. Sign Release APK (Standalone Signed APK)
+          # 2. Align & Sign Release APK (Standalone Signed APK)
           APK_UNSIGNED="app/build/outputs/apk/release/app-release-unsigned.apk"
-          APK_SIGNED="release_assets/RareLauncer-${VERSION}-release.apk"
+          APK_ALIGNED="app-release-aligned.apk"
+          APK_SIGNED="release_assets/RareLauncer-${TAG_NAME}-release.apk"
           if [ -f "$APK_UNSIGNED" ]; then
+            $BUILD_TOOLS_DIR/zipalign -p -f 4 "$APK_UNSIGNED" "$APK_ALIGNED"
             $BUILD_TOOLS_DIR/apksigner sign \
               --ks release.keystore \
               --ks-pass pass:"$PASS" \
               --ks-key-alias rarelauncer \
               --key-pass pass:"$PASS" \
               --out "$APK_SIGNED" \
-              "$APK_UNSIGNED"
+              "$APK_ALIGNED"
             echo "Successfully signed APK: $APK_SIGNED"
           fi
 
           # 3. Copy Debug APK (for quick testing/sideloading)
           APK_DEBUG="app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "$APK_DEBUG" ]; then
-            cp "$APK_DEBUG" "release_assets/RareLauncer-${VERSION}-debug.apk"
+            cp "$APK_DEBUG" "release_assets/RareLauncer-${TAG_NAME}-debug.apk"
           fi
 
           # 4. Generate SHA-256 Checksums for security verification
@@ -102,25 +134,27 @@ jobs:
       - name: Create GitHub Release with Artifacts List
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: Rare Launcer ${{ steps.meta.outputs.tag }}
           files: |
             release_assets/*.aab
             release_assets/*.apk
             release_assets/SHA256SUMS.txt
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.meta.outputs.is_prerelease == 'true' }}
           body: |
-            ### 🌌 Rare Launcer Release Assets
-            
-            Build artifacts for **The Five Zombie Org** (Team Zombie).
-            
+            ### 🌌 Rare Launcer `${{ steps.meta.outputs.tag }}`
+
+            Build artifacts for **The Five Zombie Org** (Team Zombie) — `versionName: ${{ steps.meta.outputs.version }}` (`versionCode: ${{ steps.meta.outputs.version_code }}`).
+
             | Asset | Deskripsi |
             |---|---|
             | 📦 **`.aab`** | Google Play Store Distribution (Android App Bundle, Signed) |
             | 📱 **`-release.apk`** | Production Release APK (Signed with 10-Year Keystore) |
             | 🧪 **`-debug.apk`** | Development & Testing APK (Direct ADB Install) |
             | 🔐 **`SHA256SUMS.txt`** | Checksum verifikasi integritas file |
-            
+
             > **Signing Identity**: `O=The Five Zombie Org`, `CN/OU=Team Zombie`, Validity: 10 Years (3650 days).
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
