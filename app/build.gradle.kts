@@ -14,7 +14,7 @@ android {
         val appVersionCode = providers.gradleProperty("appVersionCode").map { it.toInt() }.orElse(1).get()
 
         applicationId = "io.github.rachmanzz.rarelauncer"
-        minSdk = 28
+        minSdk = 26
         targetSdk = 37
         versionCode = appVersionCode
         versionName = appVersionName
@@ -26,7 +26,6 @@ android {
         release {
             optimization {
                 enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
         }
     }

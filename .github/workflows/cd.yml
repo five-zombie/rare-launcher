@@ -109,7 +109,7 @@ jobs:
           APK_ALIGNED="app-release-aligned.apk"
           APK_SIGNED="release_assets/RareLauncer-${TAG_NAME}-release.apk"
           if [ -f "$APK_UNSIGNED" ]; then
-            $BUILD_TOOLS_DIR/zipalign -p -f 4 "$APK_UNSIGNED" "$APK_ALIGNED"
+            $BUILD_TOOLS_DIR/zipalign -P 16 -f 4 "$APK_UNSIGNED" "$APK_ALIGNED"
             $BUILD_TOOLS_DIR/apksigner sign \
               --ks release.keystore \
               --ks-pass pass:"$PASS" \

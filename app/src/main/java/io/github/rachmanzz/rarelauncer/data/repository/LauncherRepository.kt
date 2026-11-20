@@ -12,6 +12,7 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.provider.Settings
@@ -169,9 +170,16 @@ class LauncherRepository(private val context: Context) {
         var lastPkg: String? = null
         var lastTime = 0L
 
+        val resumedEventType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            UsageEvents.Event.ACTIVITY_RESUMED
+        } else {
+            @Suppress("DEPRECATION")
+            UsageEvents.Event.MOVE_TO_FOREGROUND
+        }
+
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
-            if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED &&
+            if (event.eventType == resumedEventType &&
                 !event.packageName.isNullOrEmpty() &&
                 event.packageName != context.packageName &&
                 event.timeStamp > lastTime

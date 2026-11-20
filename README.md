@@ -36,7 +36,7 @@
 |---|---|
 | **Bahasa** | Kotlin 2.2.10 |
 | **UI Toolkit** | Jetpack Compose (BOM 2026.02.01) + Material 3 |
-| **Min SDK** | Android 9.0 (API 28) |
+| **Min SDK** | Android 8.0 (API 26) |
 | **Target / Compile SDK** | Android 16 (API 37) |
 | **Build System** | Gradle 9.6.0 + Android Gradle Plugin 9.5.1 |
 | **Java Toolchain** | JDK 21 / 25 |
