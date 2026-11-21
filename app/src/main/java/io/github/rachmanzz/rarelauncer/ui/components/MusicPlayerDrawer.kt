@@ -1,15 +1,5 @@
 package io.github.rachmanzz.rarelauncer.ui.components
 
-import android.annotation.SuppressLint
-import android.content.Context
-import android.view.ViewGroup
-import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -66,11 +56,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -84,304 +72,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import io.github.rachmanzz.rarelauncer.data.model.MusicPlayerState
 import io.github.rachmanzz.rarelauncer.data.model.MusicPlaylist
 import io.github.rachmanzz.rarelauncer.data.model.MusicTrack
 import io.github.rachmanzz.rarelauncer.data.model.PlaybackOrderMode
-import io.github.rachmanzz.rarelauncer.data.model.YouTubeWebController
 import io.github.rachmanzz.rarelauncer.ui.theme.AetherGlassBorder
 import io.github.rachmanzz.rarelauncer.ui.theme.AetherGlassBorderSubtle
 import io.github.rachmanzz.rarelauncer.ui.theme.AetherOnSurface
 import io.github.rachmanzz.rarelauncer.ui.theme.AetherOnSurfaceVariant
 import io.github.rachmanzz.rarelauncer.ui.theme.AetherPrimary
 
-private class BackgroundAudioWebView(context: Context) : WebView(context) {
-    override fun onWindowVisibilityChanged(visibility: Int) {
-        // Keep YouTube audio playing when drawer hides or launcher goes to background
-        super.onWindowVisibilityChanged(VISIBLE)
-    }
-}
-
-private const val YOUTUBE_BRIDGE_JS = """
-(function() {
-  if (window.__rareBridgeInstalled) return;
-  window.__rareBridgeInstalled = true;
-  window.__rareUserPaused = false;
-  window.__rareEndedNotified = false;
-  window.__rareHasPlayedMain = false;
-  var lastState = -1;
-  var lastDuration = 0;
-  var lastReportedTimeMs = 0;
-
-  function getUrlVideoId() {
-    try {
-      return new URLSearchParams(window.location.search).get('v') || '';
-    } catch (e) {
-      return '';
-    }
-  }
-
-  if (!window.__rareExpectedVideoId) {
-    window.__rareExpectedVideoId = getUrlVideoId();
-  }
-
-  // Prevent YouTube from auto-pausing when launcher goes to background or screen turns off
-  try {
-    Object.defineProperty(document, 'hidden', { get: function() { return false; }, configurable: true });
-    Object.defineProperty(document, 'webkitHidden', { get: function() { return false; }, configurable: true });
-    Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; }, configurable: true });
-    window.addEventListener('visibilitychange', function(e) { e.stopImmediatePropagation(); }, true);
-    document.addEventListener('visibilitychange', function(e) { e.stopImmediatePropagation(); }, true);
-  } catch (e) {}
-
-  // Inject clean full-bleed player CSS to hide YouTube page chrome
-  var style = document.createElement('style');
-  style.id = 'rare-yt-style';
-  style.textContent =
-    'html, body { margin:0 !important; padding:0 !important; background:#000 !important; overflow:hidden !important; }' +
-    'ytm-mobile-topbar-renderer, .mobile-topbar-header, ytm-pivot-bar-renderer, ' +
-    'ytm-watch-below-the-player, .watch-below-the-player, ytm-promoted-sparkles-web-renderer, ' +
-    '.ytm-autonav-bar, ytm-single-column-watch-next-results-renderer, .open-app-button, ' +
-    'ytm-mealbar-promo-renderer, .ytm-upsell-dialog-renderer { display: none !important; }' +
-    '#player-container-id, .player-container, #player, .html5-video-player { ' +
-    '  position: fixed !important; top: 0 !important; left: 0 !important; ' +
-    '  width: 100vw !important; height: 100vh !important; max-height: 100vh !important; ' +
-    '  z-index: 99999 !important; background: #000 !important; ' +
-    '}' +
-    'video.html5-main-video { width: 100vw !important; height: 100vh !important; object-fit: contain !important; }';
-  (document.head || document.documentElement).appendChild(style);
-
-  function isPlayingAd() {
-    return !!document.querySelector('.ad-showing, .ad-interrupting');
-  }
-
-  function isPlayerEnded() {
-    if (document.querySelector('.html5-video-player.ended-mode')) return true;
-    if (document.querySelector('.ytm-autonav-endscreen-countdown-overlay, .ytp-autonav-endscreen-countdown-overlay, .ytp-autonav-endscreen-upnext-container')) return true;
-    var replayBtn = document.querySelector('button[aria-label="Replay"], button[aria-label="Putar ulang"], .ytp-play-button[title="Replay"]');
-    if (replayBtn && replayBtn.offsetParent !== null) return true;
-    return false;
-  }
-
-  function notifyState(st) {
-    if (st !== lastState) {
-      lastState = st;
-      if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
-        window.AndroidBridge.onStateChange(st, window.__rareExpectedVideoId || '');
-      }
-    }
-  }
-
-  function notifyEnded() {
-    if (window.__rareEndedNotified) return;
-    window.__rareEndedNotified = true;
-    var cancelBtn = document.querySelector('.ytp-autonav-endscreen-upnext-cancel-button');
-    if (cancelBtn) {
-      try { cancelBtn.click(); } catch (e) {}
-    }
-    document.querySelectorAll('video').forEach(function(v) {
-      try { v.pause(); } catch (e) {}
-    });
-    notifyState(0);
-  }
-
-  function checkVideoCompleted(v) {
-    if (window.__rareEndedNotified || isPlayingAd()) return false;
-    var curVid = getUrlVideoId();
-    if (window.__rareExpectedVideoId && curVid && curVid !== window.__rareExpectedVideoId) {
-      notifyEnded();
-      return true;
-    }
-    if (!window.__rareHasPlayedMain) return false;
-    if (v && v.ended) {
-      notifyEnded();
-      return true;
-    }
-    if (isPlayerEnded()) {
-      notifyEnded();
-      return true;
-    }
-    if (v && isFinite(v.duration) && v.duration > 3 && v.currentTime >= v.duration - 0.35) {
-      notifyEnded();
-      return true;
-    }
-    return false;
-  }
-
-  function hookVideo(v) {
-    if (!v || v.__rareHooked) return;
-    v.__rareHooked = true;
-
-    v.addEventListener('playing', function() {
-      if (window.__rareEndedNotified) return;
-      if (!isPlayingAd() && isFinite(v.duration) && v.duration > 3) {
-        window.__rareHasPlayedMain = true;
-      }
-      notifyState(1);
-      if (!isPlayingAd() && isFinite(v.duration) && v.duration > 0 && window.AndroidBridge && window.AndroidBridge.onDuration) {
-        lastDuration = v.duration;
-        window.AndroidBridge.onDuration(v.duration);
-      }
-    });
-
-    v.addEventListener('timeupdate', function() {
-      if (window.__rareEndedNotified) return;
-      if (!isPlayingAd() && isFinite(v.duration) && v.duration > 3) {
-        if (v.currentTime > 0.4) {
-          window.__rareHasPlayedMain = true;
-        }
-        var now = Date.now();
-        if (now - lastReportedTimeMs >= 400) {
-          lastReportedTimeMs = now;
-          if (Math.abs(v.duration - lastDuration) > 1 && window.AndroidBridge && window.AndroidBridge.onDuration) {
-            lastDuration = v.duration;
-            window.AndroidBridge.onDuration(v.duration);
-          }
-          if (window.AndroidBridge && window.AndroidBridge.onCurrentTime) {
-            window.AndroidBridge.onCurrentTime(v.currentTime || 0);
-          }
-        }
-      }
-      checkVideoCompleted(v);
-    });
-
-    v.addEventListener('pause', function() {
-      if (window.__rareEndedNotified) return;
-      if (checkVideoCompleted(v)) return;
-      if (!isPlayingAd() && window.__rareHasPlayedMain && isFinite(v.duration) && v.duration > 3 && v.currentTime >= v.duration - 0.8) {
-        notifyEnded();
-        return;
-      }
-      if (!v.ended) notifyState(2);
-    });
-
-    v.addEventListener('waiting', function() {
-      if (!window.__rareEndedNotified) notifyState(3);
-    });
-
-    v.addEventListener('ended', function() {
-      if (!isPlayingAd()) {
-        notifyEnded();
-      }
-    });
-
-    v.addEventListener('durationchange', function() {
-      if (!isPlayingAd() && isFinite(v.duration) && v.duration > 0 && window.AndroidBridge && window.AndroidBridge.onDuration) {
-        lastDuration = v.duration;
-        window.AndroidBridge.onDuration(v.duration);
-      }
-    });
-  }
-
-  window.__rarePlay = function() {
-    window.__rareUserPaused = false;
-    var v = document.querySelector('video');
-    if (v) {
-      v.muted = false;
-      v.volume = 1.0;
-      var p = v.play();
-      if (p && p.catch) p.catch(function(){});
-    }
-  };
-
-  window.__rareReplay = function() {
-    window.__rareUserPaused = false;
-    window.__rareEndedNotified = false;
-    window.__rareHasPlayedMain = false;
-    lastState = -1;
-    var v = document.querySelector('video');
-    if (v) {
-      v.currentTime = 0;
-      v.muted = false;
-      v.volume = 1.0;
-      var p = v.play();
-      if (p && p.catch) p.catch(function(){});
-    }
-  };
-
-  window.__rarePause = function() {
-    window.__rareUserPaused = true;
-    document.querySelectorAll('video').forEach(function(v) { v.pause(); });
-  };
-
-  window.__rareSeek = function(sec) {
-    var v = document.querySelector('video');
-    if (v) v.currentTime = sec;
-  };
-
-  setInterval(function() {
-    if (window.__rareEndedNotified) return;
-
-    var curVid = getUrlVideoId();
-    if (window.__rareExpectedVideoId && curVid && curVid !== window.__rareExpectedVideoId) {
-      notifyEnded();
-      return;
-    }
-
-    // Auto-skip ads if skip button is visible
-    var skipBtn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
-    if (skipBtn) skipBtn.click();
-
-    // Auto-dismiss tap-to-unmute overlay
-    var unmuteBtn = document.querySelector('.ytp-unmute, button[aria-label*="Unmute"], button[aria-label*="Bunyikan"]');
-    if (unmuteBtn && unmuteBtn.offsetParent !== null) unmuteBtn.click();
-
-    var v = document.querySelector('video');
-    if (!v) {
-      if (!window.__rareUserPaused) {
-        var playOverlay = document.querySelector('.ytp-large-play-button, button[aria-label="Play"], button[aria-label="Putar"]');
-        if (playOverlay) playOverlay.click();
-      }
-      return;
-    }
-
-    hookVideo(v);
-
-    if (checkVideoCompleted(v)) return;
-    if (!isPlayingAd() && window.__rareHasPlayedMain && isFinite(v.duration) && v.duration > 3 && v.currentTime >= v.duration - 0.6 && v.paused) {
-      notifyEnded();
-      return;
-    }
-
-    var isNearEnd = !isPlayingAd() && isFinite(v.duration) && v.duration > 3 && v.currentTime >= v.duration - 1.0;
-    if (!window.__rareUserPaused && !window.__rareEndedNotified && !isPlayerEnded() && !isNearEnd) {
-      if (v.muted) {
-        v.muted = false;
-        v.volume = 1.0;
-      }
-      if (v.paused && !v.ended && v.readyState >= 2) {
-        var p = v.play();
-        if (p && p.catch) p.catch(function(){});
-      }
-    }
-
-    if (!v.paused && !v.ended && !isPlayingAd()) {
-      if (isFinite(v.duration) && v.duration > 3 && v.currentTime > 0.4) {
-        window.__rareHasPlayedMain = true;
-      }
-      notifyState(1);
-      if (isFinite(v.duration) && v.duration > 0 && Math.abs(v.duration - lastDuration) > 1) {
-        lastDuration = v.duration;
-        if (window.AndroidBridge && window.AndroidBridge.onDuration) {
-          window.AndroidBridge.onDuration(v.duration);
-        }
-      }
-      if (window.AndroidBridge && window.AndroidBridge.onCurrentTime) {
-        window.AndroidBridge.onCurrentTime(v.currentTime || 0);
-      }
-    }
-  }, 500);
-})();
-"""
-
 private enum class MusicDrawerTab {
     EXPLORE,
     PLAYLISTS,
 }
 
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun MusicPlayerDrawer(
     isOpen: Boolean,
@@ -403,19 +109,8 @@ fun MusicPlayerDrawer(
     onTogglePlayPause: () -> Unit,
     onNextTrack: () -> Unit,
     onPreviousTrack: () -> Unit,
-    onYouTubePlayerReady: (YouTubeWebController) -> Unit,
-    onYouTubeStateChange: (Int) -> Unit,
-    onYouTubeCurrentSecond: (Float) -> Unit,
-    onYouTubeDuration: (Float) -> Unit,
-    onYouTubeError: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val latestOnYouTubePlayerReady by rememberUpdatedState(onYouTubePlayerReady)
-    val latestOnYouTubeStateChange by rememberUpdatedState(onYouTubeStateChange)
-    val latestOnYouTubeCurrentSecond by rememberUpdatedState(onYouTubeCurrentSecond)
-    val latestOnYouTubeDuration by rememberUpdatedState(onYouTubeDuration)
-    val latestOnYouTubeError by rememberUpdatedState(onYouTubeError)
-
     var activeTab by remember { mutableStateOf(MusicDrawerTab.EXPLORE) }
     var openedPlaylistId by remember { mutableStateOf<String?>(null) }
     var trackToAddToPlaylist by remember { mutableStateOf<MusicTrack?>(null) }
@@ -442,8 +137,6 @@ fun MusicPlayerDrawer(
         animationSpec = tween(durationMillis = 300),
         label = "MusicDrawerScrim",
     )
-
-    val hasActiveYouTubeVideo = playerState.currentTrack != null && playerState.currentTrack.streamUrl.isBlank()
 
     Box(modifier = modifier.fillMaxSize()) {
         // Scrim backdrop (pass clicks through when closed)
@@ -541,156 +234,6 @@ fun MusicPlayerDrawer(
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
-
-                // YouTube Video & Audio Player Viewport
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(if (hasActiveYouTubeVideo) 195.dp else 1.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.Black)
-                        .border(
-                            1.dp,
-                            if (hasActiveYouTubeVideo) AetherGlassBorder else Color.Transparent,
-                            RoundedCornerShape(16.dp),
-                        )
-                        .alpha(if (hasActiveYouTubeVideo) 1f else 0.001f),
-                ) {
-                    AndroidView(
-                        factory = { ctx ->
-                            BackgroundAudioWebView(ctx).apply {
-                                layoutParams = ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                )
-                                setBackgroundColor(android.graphics.Color.BLACK)
-                                settings.apply {
-                                    javaScriptEnabled = true
-                                    mediaPlaybackRequiresUserGesture = false
-                                    domStorageEnabled = true
-                                    databaseEnabled = true
-                                    useWideViewPort = true
-                                    loadWithOverviewMode = true
-                                    cacheMode = WebSettings.LOAD_DEFAULT
-                                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                                    userAgentString =
-                                        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
-                                }
-                                val webView = this
-                                CookieManager.getInstance().apply {
-                                    setAcceptCookie(true)
-                                    setAcceptThirdPartyCookies(webView, true)
-                                }
-
-                                var currentExpectedVideoId: String? = null
-
-                                val controller = object : YouTubeWebController {
-                                    override fun loadVideo(videoId: String) {
-                                        post {
-                                            val isSameVideo = currentExpectedVideoId == videoId &&
-                                                url?.contains("v=$videoId") == true
-                                            currentExpectedVideoId = videoId
-                                            if (isSameVideo) {
-                                                android.util.Log.d("RareMusic", "WebView replaying same videoId=$videoId")
-                                                evaluateJavascript("window.__rareReplay && window.__rareReplay();", null)
-                                            } else {
-                                                android.util.Log.d("RareMusic", "WebView loading m.youtube.com/watch?v=$videoId")
-                                                evaluateJavascript("window.__rareEndedNotified = true;", null)
-                                                stopLoading()
-                                                loadUrl("https://m.youtube.com/watch?v=$videoId")
-                                            }
-                                        }
-                                    }
-
-                                    override fun play() {
-                                        post { evaluateJavascript("window.__rarePlay && window.__rarePlay();", null) }
-                                    }
-
-                                    override fun pause() {
-                                        post { evaluateJavascript("window.__rarePause && window.__rarePause();", null) }
-                                    }
-
-                                    override fun seekTo(seconds: Float) {
-                                        post { evaluateJavascript("window.__rareSeek && window.__rareSeek($seconds);", null) }
-                                    }
-                                }
-
-                                val bridge = object {
-                                    @JavascriptInterface
-                                    fun onStateChange(state: Int, videoId: String) {
-                                        post {
-                                            val expected = currentExpectedVideoId
-                                            if (videoId.isBlank() || expected == null || videoId == expected) {
-                                                latestOnYouTubeStateChange(state)
-                                            }
-                                        }
-                                    }
-
-                                    @JavascriptInterface
-                                    fun onCurrentTime(time: Float) {
-                                        post { latestOnYouTubeCurrentSecond(time) }
-                                    }
-
-                                    @JavascriptInterface
-                                    fun onDuration(duration: Float) {
-                                        post { latestOnYouTubeDuration(duration) }
-                                    }
-
-                                    @JavascriptInterface
-                                    fun onError(code: Int) {
-                                        post { latestOnYouTubeError(code) }
-                                    }
-                                }
-
-                                addJavascriptInterface(bridge, "AndroidBridge")
-                                webChromeClient = WebChromeClient()
-                                webViewClient = object : WebViewClient() {
-                                    override fun shouldOverrideUrlLoading(
-                                        view: WebView?,
-                                        request: WebResourceRequest?,
-                                    ): Boolean {
-                                        val uri = request?.url ?: return false
-                                        val scheme = uri.scheme ?: return false
-                                        // Block intent:// or vnd.youtube:// redirects so playback stays inside launcher
-                                        if (scheme != "http" && scheme != "https") return true
-                                        // Prevent YouTube's own autoplay from navigating away from our playlist track
-                                        val targetVid = uri.getQueryParameter("v")
-                                        val expected = currentExpectedVideoId
-                                        if (uri.host?.contains("youtube.com") == true &&
-                                            !targetVid.isNullOrBlank() &&
-                                            expected != null &&
-                                            targetVid != expected
-                                        ) {
-                                            post { latestOnYouTubeStateChange(0) }
-                                            return true
-                                        }
-                                        return false
-                                    }
-
-                                    override fun onPageFinished(view: WebView?, url: String?) {
-                                        super.onPageFinished(view, url)
-                                        if (url != null && url.contains("youtube.com")) {
-                                            val safeVid = currentExpectedVideoId.orEmpty()
-                                                .replace("\\", "")
-                                                .replace("'", "")
-                                            view?.evaluateJavascript(
-                                                "window.__rareExpectedVideoId = '$safeVid';",
-                                                null,
-                                            )
-                                            view?.evaluateJavascript(YOUTUBE_BRIDGE_JS, null)
-                                        }
-                                    }
-                                }
-                                post { latestOnYouTubePlayerReady(controller) }
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-
-                if (hasActiveYouTubeVideo) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                }
 
                 // Mode Switcher Tabs: EXPLORE / PLAYLISTS
                 Row(

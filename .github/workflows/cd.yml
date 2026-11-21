@@ -68,26 +68,34 @@ jobs:
             -PappVersionName="${{ steps.meta.outputs.version }}" \
             -PappVersionCode="${{ steps.meta.outputs.version_code }}"
 
-      - name: Generate Keystore & Sign Release Artifacts
+      - name: Decode Keystore & Sign Release Artifacts
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_APP_SECRET }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || secrets.ANDROID_APP_SECRET }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          # Use provided secret or fallback to default secure key for local runs
-          PASS="${KEYSTORE_PASSWORD:-rare_launcher_secret_2026}"
+          set -euo pipefail
+          trap 'rm -f release.keystore app-release-aligned.apk' EXIT
 
-          # Generate signing keystore valid for 10 years (3650 days)
-          keytool -genkeypair -v \
-            -keystore release.keystore \
-            -alias rarelauncer \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 3650 \
-            -storepass "$PASS" \
-            -keypass "$PASS" \
-            -dname "CN=Team Zombie, OU=Team Zombie, O=The Five Zombie Org, L=Jakarta, ST=DKI Jakarta, C=ID"
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::error::Missing required secret ANDROID_KEYSTORE_BASE64. Generate a permanent keystore once and store its base64 output in GitHub Secrets so app upgrades remain compatible."
+            exit 1
+          fi
+
+          if [ -z "${KEYSTORE_PASSWORD:-}" ]; then
+            echo "::error::Missing required secret ANDROID_KEYSTORE_PASSWORD (or ANDROID_APP_SECRET)."
+            exit 1
+          fi
+
+          ALIAS="${KEY_ALIAS:-rarelauncer}"
+          export KPASS="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+
+          # Decode persistent signing keystore from GitHub Secret
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > release.keystore
 
           # Locate Android build-tools apksigner and zipalign
-          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+          BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
 
           TAG_NAME="${{ steps.meta.outputs.tag }}"
           mkdir -p release_assets
@@ -98,9 +106,9 @@ jobs:
           if [ -f "$AAB_UNSIGNED" ]; then
             cp "$AAB_UNSIGNED" "$AAB_SIGNED"
             jarsigner -keystore release.keystore \
-              -storepass "$PASS" \
-              -keypass "$PASS" \
-              "$AAB_SIGNED" rarelauncer
+              -storepass:env KEYSTORE_PASSWORD \
+              -keypass:env KPASS \
+              "$AAB_SIGNED" "$ALIAS"
             echo "Successfully signed AAB: $AAB_SIGNED"
           fi
 
@@ -109,12 +117,12 @@ jobs:
           APK_ALIGNED="app-release-aligned.apk"
           APK_SIGNED="release_assets/RareLauncer-${TAG_NAME}-release.apk"
           if [ -f "$APK_UNSIGNED" ]; then
-            $BUILD_TOOLS_DIR/zipalign -P 16 -f 4 "$APK_UNSIGNED" "$APK_ALIGNED"
-            $BUILD_TOOLS_DIR/apksigner sign \
+            "$BUILD_TOOLS_DIR/zipalign" -P 16 -f 4 "$APK_UNSIGNED" "$APK_ALIGNED"
+            "$BUILD_TOOLS_DIR/apksigner" sign \
               --ks release.keystore \
-              --ks-pass pass:"$PASS" \
-              --ks-key-alias rarelauncer \
-              --key-pass pass:"$PASS" \
+              --ks-pass env:KEYSTORE_PASSWORD \
+              --ks-key-alias "$ALIAS" \
+              --key-pass env:KPASS \
               --out "$APK_SIGNED" \
               "$APK_ALIGNED"
             echo "Successfully signed APK: $APK_SIGNED"
@@ -127,9 +135,7 @@ jobs:
           fi
 
           # 4. Generate SHA-256 Checksums for security verification
-          cd release_assets
-          sha256sum * > SHA256SUMS.txt
-          cd ..
+          (cd release_assets && sha256sum * > SHA256SUMS.txt)
 
       - name: Create GitHub Release with Artifacts List
         uses: softprops/action-gh-release@v2
@@ -151,10 +157,8 @@ jobs:
             | Asset | Description |
             |---|---|
             | 📦 **`.aab`** | Google Play Store Distribution (Android App Bundle, Signed) |
-            | 📱 **`-release.apk`** | Production Release APK (Signed with 10-Year Keystore) |
+            | 📱 **`-release.apk`** | Production Release APK (Signed with Persistent Release Keystore) |
             | 🧪 **`-debug.apk`** | Development & Testing APK (Direct ADB Install) |
             | 🔐 **`SHA256SUMS.txt`** | File integrity verification checksums |
-
-            > **Signing Identity**: `O=The Five Zombie Org`, `CN/OU=Team Zombie`, Validity: 10 Years (3650 days).
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

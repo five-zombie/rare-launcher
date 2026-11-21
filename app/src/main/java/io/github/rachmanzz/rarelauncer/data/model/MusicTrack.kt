@@ -31,10 +31,3 @@ data class MusicPlayerState(
     val playbackOrderMode: PlaybackOrderMode = PlaybackOrderMode.SEQUENTIAL,
     val error: String? = null,
 )
-
-interface YouTubeWebController {
-    fun loadVideo(videoId: String)
-    fun play()
-    fun pause()
-    fun seekTo(seconds: Float)
-}

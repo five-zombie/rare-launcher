@@ -21,7 +21,6 @@ import io.github.rachmanzz.rarelauncer.data.model.MusicPlaylist
 import io.github.rachmanzz.rarelauncer.data.model.MusicTrack
 import io.github.rachmanzz.rarelauncer.data.model.PlaybackOrderMode
 import io.github.rachmanzz.rarelauncer.data.model.WallpaperConfig
-import io.github.rachmanzz.rarelauncer.data.model.YouTubeWebController
 import io.github.rachmanzz.rarelauncer.data.repository.LauncherRepository
 import io.github.rachmanzz.rarelauncer.data.repository.MusicRepository
 import io.github.rachmanzz.rarelauncer.service.LockScreenService
@@ -61,11 +60,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private var exoPlayer: ExoPlayer? = null
     private var progressTrackingJob: Job? = null
     private var musicSearchJob: Job? = null
-    private var youTubeController: YouTubeWebController? = null
-    private var pendingYouTubeVideoId: String? = null
     private var shuffledTrackIds: List<String> = emptyList()
     private var shuffledQueueSignature: List<String> = emptyList()
-    private var userPausedYouTube: Boolean = false
     private var lastTrackAdvanceTimestampMs: Long = 0L
 
     // Music Player State
@@ -388,52 +384,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         _isSearchingMusic.value = false
     }
 
-    fun setYouTubeController(controller: YouTubeWebController) {
-        youTubeController = controller
-        pendingYouTubeVideoId?.let { videoId ->
-            controller.loadVideo(videoId)
-            pendingYouTubeVideoId = null
-        }
-    }
-
-    fun onYouTubePlayerStateChanged(state: Int) {
-        when (state) {
-            1 -> { // PLAYING
-                userPausedYouTube = false
-                _musicPlayerState.value = _musicPlayerState.value.copy(
-                    isPlaying = true,
-                    isBuffering = false,
-                    error = null,
-                )
-                syncMusicService()
-            }
-            2 -> { // PAUSED
-                val current = _musicPlayerState.value
-                val reachedEnd = !userPausedYouTube &&
-                    current.currentTrack?.streamUrl?.isBlank() == true &&
-                    current.durationMs > 3000L &&
-                    current.currentPositionMs >= current.durationMs - 1500L
-                if (reachedEnd) {
-                    handleTrackEnded()
-                } else {
-                    _musicPlayerState.value = current.copy(
-                        isPlaying = false,
-                        isBuffering = false,
-                    )
-                    syncMusicService()
-                }
-            }
-            3 -> { // BUFFERING
-                _musicPlayerState.value = _musicPlayerState.value.copy(
-                    isBuffering = true,
-                )
-            }
-            0 -> { // ENDED
-                handleTrackEnded()
-            }
-        }
-    }
-
     private fun handleTrackEnded() {
         val now = System.currentTimeMillis()
         if (now - lastTrackAdvanceTimestampMs < 1500L) {
@@ -445,39 +395,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             isBuffering = false,
         )
         playNextTrack()
-    }
-
-    fun onYouTubeCurrentSecond(second: Float) {
-        val currentTrack = _musicPlayerState.value.currentTrack
-        if (currentTrack != null && currentTrack.streamUrl.isBlank()) {
-            _musicPlayerState.value = _musicPlayerState.value.copy(
-                currentPositionMs = (second * 1000).toLong(),
-            )
-        }
-    }
-
-    fun onYouTubeVideoDuration(duration: Float) {
-        val currentTrack = _musicPlayerState.value.currentTrack
-        if (currentTrack != null && currentTrack.streamUrl.isBlank()) {
-            _musicPlayerState.value = _musicPlayerState.value.copy(
-                durationMs = (duration * 1000).toLong(),
-            )
-        }
-    }
-
-    fun onYouTubeError(errorCode: Int) {
-        android.util.Log.e("RareMusic", "YouTube player error code: $errorCode")
-        val msg = when (errorCode) {
-            101, 150 -> "Video tidak mengizinkan pemutaran embed"
-            100 -> "Video YouTube tidak ditemukan"
-            2 -> "Parameter video tidak valid"
-            else -> "Error pemutaran YouTube ($errorCode)"
-        }
-        _musicPlayerState.value = _musicPlayerState.value.copy(
-            isBuffering = false,
-            isPlaying = false,
-            error = msg,
-        )
     }
 
     fun setPlaybackOrderMode(mode: PlaybackOrderMode) {
@@ -530,12 +447,22 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val currentState = _musicPlayerState.value
             val activeQueue = queue ?: currentState.queue.ifEmpty { _musicSearchResults.value }
-            userPausedYouTube = false
             lastTrackAdvanceTimestampMs = System.currentTimeMillis()
 
             if (!preserveShuffleOrder && currentState.playbackOrderMode == PlaybackOrderMode.SHUFFLE) {
                 shuffledTrackIds = buildShuffledIds(activeQueue, anchorFirstId = track.id)
                 shuffledQueueSignature = activeQueue.map { it.id }
+            }
+
+            if (track.streamUrl.isBlank()) {
+                _musicPlayerState.value = currentState.copy(
+                    currentTrack = track,
+                    isBuffering = false,
+                    isPlaying = false,
+                    queue = activeQueue,
+                    error = "Stream URL tidak tersedia",
+                )
+                return@launch
             }
 
             _musicPlayerState.value = currentState.copy(
@@ -549,70 +476,40 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             )
             syncMusicService()
 
-            android.util.Log.d("RareMusic", "playTrack: id=${track.id}, title=${track.title}, streamUrl=${track.streamUrl}")
-
-            if (track.streamUrl.isNotBlank()) {
-                // Direct MP3 stream (e.g. Nightride FM)
-                youTubeController?.pause()
-                exoPlayer?.let { player ->
-                    val mediaItem = MediaItem.Builder()
-                        .setUri(track.streamUrl)
-                        .setMediaMetadata(
-                            MediaMetadata.Builder()
-                                .setTitle(track.title)
-                                .setArtist(track.artist)
-                                .build()
-                        )
-                        .build()
-                    player.setMediaItem(mediaItem)
-                    player.prepare()
-                    player.play()
-                }
-            } else {
-                // Native YouTube stream via embedded player
-                exoPlayer?.stop()
-                exoPlayer?.clearMediaItems()
-                val controller = youTubeController
-                if (controller != null) {
-                    controller.loadVideo(track.id)
-                } else {
-                    pendingYouTubeVideoId = track.id
-                }
+            exoPlayer?.let { player ->
+                val mediaItem = MediaItem.Builder()
+                    .setUri(track.streamUrl)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(track.title)
+                            .setArtist(track.artist)
+                            .build()
+                    )
+                    .build()
+                player.setMediaItem(mediaItem)
+                player.prepare()
+                player.play()
             }
         }
     }
 
     fun resumePlayback() {
         val currentTrack = _musicPlayerState.value.currentTrack ?: return
-        if (currentTrack.streamUrl.isBlank()) {
-            userPausedYouTube = false
-            youTubeController?.play()
-        } else {
-            exoPlayer?.let { player ->
-                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
-                    playTrack(currentTrack)
-                } else {
-                    player.play()
-                }
+        exoPlayer?.let { player ->
+            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                playTrack(currentTrack)
+            } else {
+                player.play()
             }
         }
     }
 
     fun pausePlayback() {
-        val currentTrack = _musicPlayerState.value.currentTrack ?: return
-        if (currentTrack.streamUrl.isBlank()) {
-            userPausedYouTube = true
-            youTubeController?.pause()
-            _musicPlayerState.value = _musicPlayerState.value.copy(isPlaying = false, isBuffering = false)
-            syncMusicService()
-        } else {
-            exoPlayer?.pause()
-        }
+        if (_musicPlayerState.value.currentTrack == null) return
+        exoPlayer?.pause()
     }
 
     fun stopMusicPlayback() {
-        userPausedYouTube = true
-        youTubeController?.pause()
         exoPlayer?.stop()
         exoPlayer?.clearMediaItems()
         stopProgressTracking()
@@ -631,12 +528,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun seekTo(positionMs: Long) {
-        val currentTrack = _musicPlayerState.value.currentTrack
-        if (currentTrack != null && currentTrack.streamUrl.isBlank()) {
-            youTubeController?.seekTo(positionMs / 1000f)
-        } else {
-            exoPlayer?.seekTo(positionMs)
-        }
+        exoPlayer?.seekTo(positionMs)
     }
 
     fun playNextTrack() {
@@ -790,7 +682,6 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         MusicPlaybackService.stop(getApplication())
         exoPlayer?.release()
         exoPlayer = null
-        youTubeController = null
         try {
             getApplication<Application>().unregisterReceiver(batteryReceiver)
         } catch (e: Exception) {

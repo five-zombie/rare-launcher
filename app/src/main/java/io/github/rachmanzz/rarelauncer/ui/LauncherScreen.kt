@@ -50,7 +50,6 @@ import io.github.rachmanzz.rarelauncer.ui.components.SlideToOpenOverlay
 import io.github.rachmanzz.rarelauncer.ui.theme.RareLauncerTheme
 import io.github.rachmanzz.rarelauncer.ui.viewmodel.ClockUiState
 import io.github.rachmanzz.rarelauncer.ui.viewmodel.DrawerTab
-import io.github.rachmanzz.rarelauncer.data.model.YouTubeWebController
 import io.github.rachmanzz.rarelauncer.ui.viewmodel.LauncherViewModel
 import kotlin.math.abs
 
@@ -145,11 +144,6 @@ fun LauncherScreen(
         onTogglePlayPause = { viewModel.togglePlayPause() },
         onNextTrack = { viewModel.playNextTrack() },
         onPreviousTrack = { viewModel.playPreviousTrack() },
-        onYouTubePlayerReady = { viewModel.setYouTubeController(it) },
-        onYouTubeStateChange = { viewModel.onYouTubePlayerStateChanged(it) },
-        onYouTubeCurrentSecond = { viewModel.onYouTubeCurrentSecond(it) },
-        onYouTubeDuration = { viewModel.onYouTubeVideoDuration(it) },
-        onYouTubeError = { viewModel.onYouTubeError(it) },
         contacts = contacts,
         hasContactsPermission = hasContactsPermission,
         drawerTab = drawerTab,
@@ -349,11 +343,6 @@ fun LauncherContent(
     onTogglePlayPause: () -> Unit = {},
     onNextTrack: () -> Unit = {},
     onPreviousTrack: () -> Unit = {},
-    onYouTubePlayerReady: (YouTubeWebController) -> Unit = {},
-    onYouTubeStateChange: (Int) -> Unit = {},
-    onYouTubeCurrentSecond: (Float) -> Unit = {},
-    onYouTubeDuration: (Float) -> Unit = {},
-    onYouTubeError: (Int) -> Unit = {},
     onOpenCommClicked: () -> Unit,
     onCloseCommClicked: () -> Unit,
     onAppClicked: (AppItem) -> Unit,
@@ -594,11 +583,6 @@ fun LauncherContent(
             onTogglePlayPause = onTogglePlayPause,
             onNextTrack = onNextTrack,
             onPreviousTrack = onPreviousTrack,
-            onYouTubePlayerReady = onYouTubePlayerReady,
-            onYouTubeStateChange = onYouTubeStateChange,
-            onYouTubeCurrentSecond = onYouTubeCurrentSecond,
-            onYouTubeDuration = onYouTubeDuration,
-            onYouTubeError = onYouTubeError,
         )
 
         // Quick Action Communication Drawer (Slide to right hub) - strictly hidden when App Drawer or Quick Recents is open
@@ -677,7 +661,7 @@ fun LauncherScreenPreview() {
                 AppItem("Chrome", "com.android.chrome", ""),
                 AppItem("Clock", "com.android.deskclock", ""),
                 AppItem("Settings", "com.android.settings", ""),
-                AppItem("YouTube", "com.google.android.youtube", "")
+                AppItem("Music", "com.android.music", "")
             ),
             filteredApps = listOf(
                 AppItem("Calculator", "com.android.calculator2", ""),
@@ -686,7 +670,7 @@ fun LauncherScreenPreview() {
                 AppItem("Chrome", "com.android.chrome", ""),
                 AppItem("Clock", "com.android.deskclock", ""),
                 AppItem("Settings", "com.android.settings", ""),
-                AppItem("YouTube", "com.google.android.youtube", "")
+                AppItem("Music", "com.android.music", "")
             ),
             searchQuery = "",
             isCommDrawerOpen = false,
