@@ -19,12 +19,12 @@
 - **🔐 Biometric Hidden Vault & App Lock**:
   - Hide private apps from the main app drawer and secure them with fingerprint / PIN.
   - Per-app lock (*App Lock*) that stays enforced even when launched from notifications or Recent Apps.
-- **🎵 Cyber Stream Online Music Player (YouTube Music)**:
+- **🎵 Cyber Stream Online Music & Radio Player**:
   - **Swipe Left-to-Right**: Slide from left to open the cyber music streaming drawer.
-  - Cari jutaan lagu online secara gratis tanpa iklan dan tanpa API key berbayar.
-  - Dilengkapi starter pack radio synthwave/cyberpunk & lofi 24/7.
+  - Nikmati siaran radio online bebas royalti (synthwave, cyberpunk, lo-fi, ambient chillout) 24/7 langsung di launcher.
+  - Fitur pencarian radio global gratis dan preview lagu tanpa API key berbayar.
   - Powered by **Media3 ExoPlayer**: Mendukung background audio playback saat membuka app lain atau layar mati.
-  - Mini player interaktif dengan play/pause, next/prev, dan progress bar.
+  - Mini player interaktif dengan play/pause, next/prev, acak (shuffle), urut, dan playlist lokal.
 - **📞 Communication & Speed Dial Hub**:
   - **Swipe Right-to-Left**: Slide from right to open the quick communication drawer.
   - Equipped with a **Slide-to-Call** safety confirmation (slide right to call) to prevent accidental dialing.

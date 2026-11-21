@@ -27,7 +27,7 @@ import java.util.concurrent.Executors
 
 /**
  * Foreground Media Playback service (foregroundServiceType="mediaPlayback")
- * that keeps YouTube / audio streaming alive off-screen and when screen is off,
+ * that keeps audio streaming alive off-screen and when screen is off,
  * while exposing native MediaSession controls in Notification Shade, Lock Screen,
  * and Bluetooth headsets.
  */
@@ -37,7 +37,7 @@ class MusicPlaybackService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var isForegroundStarted = false
     private var currentTitle = "Cyber Stream"
-    private var currentArtist = "YouTube Music"
+    private var currentArtist = "Online Radio"
     private var currentThumbnailUrl = ""
     private var currentArtwork: Bitmap? = null
     private var currentIsPlaying = false
@@ -104,7 +104,7 @@ class MusicPlaybackService : Service() {
         when (intent?.action) {
             ACTION_SYNC -> {
                 val title = intent.getStringExtra(EXTRA_TITLE).orEmpty().ifBlank { "Cyber Stream" }
-                val artist = intent.getStringExtra(EXTRA_ARTIST).orEmpty().ifBlank { "YouTube Music" }
+                val artist = intent.getStringExtra(EXTRA_ARTIST).orEmpty().ifBlank { "Online Radio" }
                 val thumbUrl = intent.getStringExtra(EXTRA_THUMBNAIL).orEmpty()
                 val isPlaying = intent.getBooleanExtra(EXTRA_IS_PLAYING, false)
                 val durationMs = intent.getLongExtra(EXTRA_DURATION_MS, 0L)

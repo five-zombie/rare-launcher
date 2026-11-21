@@ -15,12 +15,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Music repository connecting to YouTube Music / YouTube InnerTube API
- * with automatic fallback and fast direct streaming.
+ * Music repository connecting to curated royalty-free synthwave / lo-fi / chillout
+ * radio web streams and open audio sources. Fully compliant for public distribution.
  */
 class MusicRepository {
 
-    /** Curated starter cyberpunk, synthwave & chill tracks for instant playback on launch */
+    /** Curated starter cyberpunk, synthwave & chill royalty-free radio stations */
     val curatedTrendingTracks = listOf(
         MusicTrack(
             id = "synth_chillsynth_1",
@@ -55,20 +55,36 @@ class MusicRepository {
             streamUrl = "https://stream.nightride.fm/spacesynth.mp3",
         ),
         MusicTrack(
-            id = "8IsnNdTIh-k",
-            title = "Risk It All",
-            artist = "Bruno Mars (Cover)",
-            durationText = "03:45",
-            thumbnailUrl = "https://i.ytimg.com/vi/8IsnNdTIh-k/hqdefault.jpg",
-            streamUrl = "",
+            id = "synth_somafm_groovesalad",
+            title = "Groove Salad Ambient Chill",
+            artist = "SomaFM",
+            durationText = "LIVE",
+            thumbnailUrl = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=400&q=80",
+            streamUrl = "https://ice6.somafm.com/groovesalad-128-mp3",
         ),
         MusicTrack(
-            id = "hT_nvWreIhg",
-            title = "Counting Stars",
-            artist = "OneRepublic",
-            durationText = "04:18",
-            thumbnailUrl = "https://i.ytimg.com/vi/hT_nvWreIhg/hqdefault.jpg",
-            streamUrl = "",
+            id = "synth_somafm_defcon",
+            title = "DEF CON Hacker Radio",
+            artist = "SomaFM",
+            durationText = "LIVE",
+            thumbnailUrl = "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=400&q=80",
+            streamUrl = "https://ice6.somafm.com/defcon-128-mp3",
+        ),
+        MusicTrack(
+            id = "synth_somafm_dronezone",
+            title = "Drone Zone Atmospheric Ambient",
+            artist = "SomaFM",
+            durationText = "LIVE",
+            thumbnailUrl = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=400&q=80",
+            streamUrl = "https://ice6.somafm.com/dronezone-128-mp3",
+        ),
+        MusicTrack(
+            id = "synth_somafm_vaporwaves",
+            title = "Vaporwaves Aesthetic Chill",
+            artist = "SomaFM",
+            durationText = "LIVE",
+            thumbnailUrl = "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=400&q=80",
+            streamUrl = "https://ice6.somafm.com/vaporwaves-128-mp3",
         ),
     )
 
@@ -77,45 +93,45 @@ class MusicRepository {
 
         val results = mutableListOf<MusicTrack>()
 
-        // 1. Direct Official YouTube Search (InnerTube Endpoint - 100% Real YouTube / YouTube Music)
+        // 1. Search Open Radio Browser API (Free global radio & music streams)
         try {
-            val payload = JSONObject().apply {
-                put("context", JSONObject().apply {
-                    put("client", JSONObject().apply {
-                        put("clientName", "WEB")
-                        put("clientVersion", "2.20240101.00.00")
-                    })
-                })
-                put("query", query)
-            }
-
-            val url = URL("https://www.youtube.com/youtubei/v1/search")
+            val encodedQuery = URLEncoder.encode(query, "UTF-8")
+            val url = URL("https://de1.api.radio-browser.info/json/stations/byname/$encodedQuery?limit=25")
             val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 5000
-                readTimeout = 5000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0")
+                connectTimeout = 4000
+                readTimeout = 4000
+                setRequestProperty("User-Agent", "RareLauncher/1.0")
             }
-
-            conn.outputStream.use { os ->
-                os.write(payload.toString().toByteArray(Charsets.UTF_8))
-            }
-
             if (conn.responseCode == 200) {
                 val body = conn.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(body)
-                parseYouTubeInnerTube(json, results)
+                val items = JSONArray(body)
+                for (i in 0 until items.length()) {
+                    val item = items.getJSONObject(i)
+                    val streamUrl = item.optString("url_resolved", "").ifBlank { item.optString("url", "") }
+                    val name = item.optString("name", "")
+                    if (streamUrl.isNotBlank() && name.isNotBlank() && (streamUrl.startsWith("http://") || streamUrl.startsWith("https://"))) {
+                        val tags = item.optString("tags", "").replace(",", " • ")
+                        val favicon = item.optString("favicon", "")
+                        val stationUuid = item.optString("stationuuid", "radio_$i")
+                        results.add(
+                            MusicTrack(
+                                id = stationUuid,
+                                title = name,
+                                artist = tags.ifBlank { "Online Stream" },
+                                durationText = "LIVE",
+                                thumbnailUrl = favicon,
+                                streamUrl = streamUrl,
+                            )
+                        )
+                    }
+                }
                 if (results.isNotEmpty()) {
                     return@withContext results
                 }
             }
-        } catch (e: Exception) {
-            android.util.Log.e("RareMusic", "YouTube search failed: ${e.message}")
-        }
+        } catch (_: Exception) {}
 
-        // 2. Fallback: iTunes Music Search
+        // 2. Fallback: Search iTunes preview songs
         try {
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
             val url = URL("https://itunes.apple.com/search?term=$encodedQuery&entity=song&limit=25")
@@ -157,58 +173,7 @@ class MusicRepository {
             }
         } catch (_: Exception) {}
 
-        results
-    }
-
-    private fun parseYouTubeInnerTube(obj: Any, results: MutableList<MusicTrack>) {
-        if (results.size >= 30) return
-        if (obj is JSONObject) {
-            if (obj.has("videoRenderer")) {
-                val vr = obj.getJSONObject("videoRenderer")
-                val vid = vr.optString("videoId", "")
-                val titleObj = vr.optJSONObject("title")
-                val titleRuns = titleObj?.optJSONArray("runs")
-                val title = if (titleRuns != null && titleRuns.length() > 0) {
-                    titleRuns.getJSONObject(0).optString("text", "")
-                } else ""
-
-                val ownerObj = vr.optJSONObject("ownerText")
-                val ownerRuns = ownerObj?.optJSONArray("runs")
-                val artist = if (ownerRuns != null && ownerRuns.length() > 0) {
-                    ownerRuns.getJSONObject(0).optString("text", "")
-                } else "YouTube Music"
-
-                val durObj = vr.optJSONObject("lengthText")
-                val dur = durObj?.optString("simpleText", "") ?: ""
-
-                val thumbObj = vr.optJSONObject("thumbnail")
-                val thumbList = thumbObj?.optJSONArray("thumbnails")
-                val thumb = if (thumbList != null && thumbList.length() > 0) {
-                    thumbList.getJSONObject(thumbList.length() - 1).optString("url", "")
-                } else ""
-
-                if (vid.isNotBlank() && title.isNotBlank()) {
-                    results.add(
-                        MusicTrack(
-                            id = vid,
-                            title = title,
-                            artist = artist,
-                            durationText = dur,
-                            thumbnailUrl = thumb,
-                        )
-                    )
-                }
-            }
-            val keys = obj.keys()
-            while (keys.hasNext()) {
-                val k = keys.next()
-                parseYouTubeInnerTube(obj.get(k), results)
-            }
-        } else if (obj is JSONArray) {
-            for (i in 0 until obj.length()) {
-                parseYouTubeInnerTube(obj.get(i), results)
-            }
-        }
+        if (results.isNotEmpty()) results else curatedTrendingTracks
     }
 
     fun loadPlaylists(context: Context): List<MusicPlaylist> {
