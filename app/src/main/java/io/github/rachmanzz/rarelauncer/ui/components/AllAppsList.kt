@@ -249,26 +249,40 @@ fun AllAppsDrawer(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    text = if (drawerTab == DrawerTab.ACTIVE) "Search ${apps.size} applications..." else "Search hidden apps...",
-                                    color = AetherOnSurfaceVariant.copy(alpha = 0.6f),
-                                    fontSize = 13.sp
-                                )
+                        val searchTextStyle = TextStyle(
+                            color = AetherOnSurface,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            fontWeight = FontWeight.Normal,
+                            fontFamily = FontFamily.Default,
+                            letterSpacing = 0.sp
+                        )
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = onSearchQueryChange,
+                            singleLine = true,
+                            textStyle = searchTextStyle,
+                            cursorBrush = SolidColor(AetherPrimary),
+                            modifier = Modifier.weight(1f),
+                            decorationBox = { innerTextField ->
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text(
+                                            text = if (drawerTab == DrawerTab.ACTIVE) "Search ${apps.size} applications..." else "Search hidden apps...",
+                                            style = searchTextStyle.copy(
+                                                color = AetherOnSurfaceVariant.copy(alpha = 0.6f)
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    innerTextField()
+                                }
                             }
-                            BasicTextField(
-                                value = searchQuery,
-                                onValueChange = onSearchQueryChange,
-                                singleLine = true,
-                                textStyle = TextStyle(
-                                    color = AetherOnSurface,
-                                    fontSize = 13.sp
-                                ),
-                                cursorBrush = SolidColor(AetherPrimary),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                        )
                         if (searchQuery.isNotEmpty()) {
                             IconButton(
                                 onClick = onClearSearch,
@@ -524,13 +538,13 @@ fun AllAppsDrawer(
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                                     Icon(
                                                         imageVector = Icons.Default.Add,
-                                                        contentDescription = "Pilih",
+                                                        contentDescription = "Select",
                                                         tint = AetherPrimary,
                                                         modifier = Modifier.size(12.dp)
                                                     )
                                                     Spacer(modifier = Modifier.width(3.dp))
                                                     Text(
-                                                        text = "Pilih",
+                                                        text = "Select",
                                                         color = AetherPrimary,
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.SemiBold
@@ -565,7 +579,7 @@ fun AllAppsDrawer(
                                                 )
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text(
-                                                    text = "Ketuk untuk memilih aplikasi Bookmark (Max 10)",
+                                                    text = "Tap to select Bookmark apps (Max 10)",
                                                     color = AetherPrimary,
                                                     fontSize = 12.sp,
                                                     textAlign = TextAlign.Center
@@ -875,7 +889,7 @@ fun AllAppsDrawer(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = "Kelola Bookmark", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Manage Bookmarks", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Text(
                         text = "${bookmarkedPackageNames.size}/10",
                         color = Color(0xFFFFD54F),
@@ -906,23 +920,40 @@ fun AllAppsDrawer(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (pickerSearchQuery.isEmpty()) {
-                                Text(
-                                    text = "Cari aplikasi...",
-                                    color = AetherOnSurfaceVariant.copy(alpha = 0.5f),
-                                    fontSize = 12.sp
-                                )
+                        val pickerSearchStyle = TextStyle(
+                            color = AetherOnSurface,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Normal,
+                            fontFamily = FontFamily.Default,
+                            letterSpacing = 0.sp
+                        )
+                        BasicTextField(
+                            value = pickerSearchQuery,
+                            onValueChange = { pickerSearchQuery = it },
+                            singleLine = true,
+                            textStyle = pickerSearchStyle,
+                            cursorBrush = SolidColor(AetherPrimary),
+                            modifier = Modifier.weight(1f),
+                            decorationBox = { innerTextField ->
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (pickerSearchQuery.isEmpty()) {
+                                        Text(
+                                            text = "Search apps...",
+                                            style = pickerSearchStyle.copy(
+                                                color = AetherOnSurfaceVariant.copy(alpha = 0.5f)
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    innerTextField()
+                                }
                             }
-                            BasicTextField(
-                                value = pickerSearchQuery,
-                                onValueChange = { pickerSearchQuery = it },
-                                singleLine = true,
-                                textStyle = TextStyle(color = AetherOnSurface, fontSize = 12.sp),
-                                cursorBrush = SolidColor(AetherPrimary),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                        )
                         if (pickerSearchQuery.isNotEmpty()) {
                             IconButton(
                                 onClick = { pickerSearchQuery = "" },
@@ -1041,7 +1072,7 @@ fun AllAppsDrawer(
             },
             confirmButton = {
                 TextButton(onClick = { isBookmarkPickerOpen = false }) {
-                    Text(text = "Selesai")
+                    Text(text = "Done")
                 }
             }
         )

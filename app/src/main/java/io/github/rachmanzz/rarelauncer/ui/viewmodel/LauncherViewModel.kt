@@ -8,13 +8,24 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import io.github.rachmanzz.rarelauncer.data.model.AppDirectory
 import io.github.rachmanzz.rarelauncer.data.model.AppItem
 import io.github.rachmanzz.rarelauncer.data.model.AtmospherePreset
 import io.github.rachmanzz.rarelauncer.data.model.ContactItem
+import io.github.rachmanzz.rarelauncer.data.model.MusicPlayerState
+import io.github.rachmanzz.rarelauncer.data.model.MusicPlaylist
+import io.github.rachmanzz.rarelauncer.data.model.MusicTrack
+import io.github.rachmanzz.rarelauncer.data.model.PlaybackOrderMode
 import io.github.rachmanzz.rarelauncer.data.model.WallpaperConfig
+import io.github.rachmanzz.rarelauncer.data.model.YouTubeWebController
 import io.github.rachmanzz.rarelauncer.data.repository.LauncherRepository
+import io.github.rachmanzz.rarelauncer.data.repository.MusicRepository
 import io.github.rachmanzz.rarelauncer.service.LockScreenService
+import io.github.rachmanzz.rarelauncer.service.MusicPlaybackService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +56,42 @@ data class ClockUiState(
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = LauncherRepository(application)
+    private val musicRepository = MusicRepository()
+
+    private var exoPlayer: ExoPlayer? = null
+    private var progressTrackingJob: Job? = null
+    private var musicSearchJob: Job? = null
+    private var youTubeController: YouTubeWebController? = null
+    private var pendingYouTubeVideoId: String? = null
+    private var shuffledTrackIds: List<String> = emptyList()
+    private var shuffledQueueSignature: List<String> = emptyList()
+    private var userPausedYouTube: Boolean = false
+    private var lastTrackAdvanceTimestampMs: Long = 0L
+
+    // Music Player State
+    private val _isMusicDrawerOpen = MutableStateFlow(false)
+    val isMusicDrawerOpen: StateFlow<Boolean> = _isMusicDrawerOpen.asStateFlow()
+
+    private val _musicPlayerState = MutableStateFlow(
+        MusicPlayerState(
+            playbackOrderMode = musicRepository.loadPlaybackOrderMode(application),
+        ),
+    )
+    val musicPlayerState: StateFlow<MusicPlayerState> = _musicPlayerState.asStateFlow()
+
+    private val _musicSearchQuery = MutableStateFlow("")
+    val musicSearchQuery: StateFlow<String> = _musicSearchQuery.asStateFlow()
+
+    private val _musicSearchResults = MutableStateFlow<List<MusicTrack>>(musicRepository.curatedTrendingTracks)
+    val musicSearchResults: StateFlow<List<MusicTrack>> = _musicSearchResults.asStateFlow()
+
+    private val _isSearchingMusic = MutableStateFlow(false)
+    val isSearchingMusic: StateFlow<Boolean> = _isSearchingMusic.asStateFlow()
+
+    private val _musicPlaylists = MutableStateFlow<List<MusicPlaylist>>(
+        musicRepository.loadPlaylists(application),
+    )
+    val musicPlaylists: StateFlow<List<MusicPlaylist>> = _musicPlaylists.asStateFlow()
 
     private val _clockState = MutableStateFlow(ClockUiState())
     val clockState: StateFlow<ClockUiState> = _clockState.asStateFlow()
@@ -212,6 +259,523 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         loadWallpaperConfig()
         loadContacts()
         registerBatteryReceiver()
+        initExoPlayer()
+        registerMusicServiceCallbacks()
+    }
+
+    private fun registerMusicServiceCallbacks() {
+        MusicPlaybackService.registerCallbacks(object : MusicPlaybackService.PlaybackCallbacks {
+            override fun onPlay() {
+                viewModelScope.launch { resumePlayback() }
+            }
+
+            override fun onPause() {
+                viewModelScope.launch { pausePlayback() }
+            }
+
+            override fun onNext() {
+                viewModelScope.launch { playNextTrack() }
+            }
+
+            override fun onPrevious() {
+                viewModelScope.launch { playPreviousTrack() }
+            }
+
+            override fun onStop() {
+                viewModelScope.launch { stopMusicPlayback() }
+            }
+        })
+    }
+
+    private fun syncMusicService() {
+        val state = _musicPlayerState.value
+        val track = state.currentTrack
+        if (track == null) {
+            MusicPlaybackService.stop(getApplication())
+        } else {
+            MusicPlaybackService.syncState(
+                context = getApplication(),
+                title = track.title,
+                artist = track.artist,
+                thumbnailUrl = track.thumbnailUrl,
+                isPlaying = state.isPlaying || state.isBuffering,
+                durationMs = state.durationMs,
+            )
+        }
+    }
+
+    private fun initExoPlayer() {
+        val player = ExoPlayer.Builder(getApplication()).build()
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                val isBuffering = playbackState == Player.STATE_BUFFERING
+                val isEnded = playbackState == Player.STATE_ENDED
+                _musicPlayerState.value = _musicPlayerState.value.copy(
+                    isBuffering = isBuffering,
+                    durationMs = player.duration.coerceAtLeast(0L),
+                )
+                if (isEnded && _musicPlayerState.value.currentTrack?.streamUrl?.isNotBlank() == true) {
+                    handleTrackEnded()
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                _musicPlayerState.value = _musicPlayerState.value.copy(
+                    isPlaying = isPlaying,
+                    isBuffering = false,
+                    durationMs = player.duration.coerceAtLeast(0L),
+                )
+                if (isPlaying) {
+                    startProgressTracking()
+                } else {
+                    stopProgressTracking()
+                }
+                syncMusicService()
+            }
+        })
+        exoPlayer = player
+    }
+
+    private fun startProgressTracking() {
+        progressTrackingJob?.cancel()
+        progressTrackingJob = viewModelScope.launch {
+            while (isActive) {
+                exoPlayer?.let { player ->
+                    _musicPlayerState.value = _musicPlayerState.value.copy(
+                        currentPositionMs = player.currentPosition.coerceAtLeast(0L),
+                        durationMs = player.duration.coerceAtLeast(0L),
+                    )
+                }
+                delay(500L)
+            }
+        }
+    }
+
+    private fun stopProgressTracking() {
+        progressTrackingJob?.cancel()
+        progressTrackingJob = null
+    }
+
+    fun openMusicDrawer() {
+        _isMusicDrawerOpen.value = true
+    }
+
+    fun closeMusicDrawer() {
+        _isMusicDrawerOpen.value = false
+    }
+
+    fun onMusicSearchQueryChange(query: String) {
+        _musicSearchQuery.value = query
+        musicSearchJob?.cancel()
+        if (query.isBlank()) {
+            _musicSearchResults.value = musicRepository.curatedTrendingTracks
+            _isSearchingMusic.value = false
+            return
+        }
+        musicSearchJob = viewModelScope.launch {
+            delay(500L) // Debounce search
+            _isSearchingMusic.value = true
+            val results = musicRepository.searchTracks(query)
+            _musicSearchResults.value = if (results.isNotEmpty()) results else musicRepository.curatedTrendingTracks
+            _isSearchingMusic.value = false
+        }
+    }
+
+    fun clearMusicSearch() {
+        _musicSearchQuery.value = ""
+        musicSearchJob?.cancel()
+        _musicSearchResults.value = musicRepository.curatedTrendingTracks
+        _isSearchingMusic.value = false
+    }
+
+    fun setYouTubeController(controller: YouTubeWebController) {
+        youTubeController = controller
+        pendingYouTubeVideoId?.let { videoId ->
+            controller.loadVideo(videoId)
+            pendingYouTubeVideoId = null
+        }
+    }
+
+    fun onYouTubePlayerStateChanged(state: Int) {
+        when (state) {
+            1 -> { // PLAYING
+                userPausedYouTube = false
+                _musicPlayerState.value = _musicPlayerState.value.copy(
+                    isPlaying = true,
+                    isBuffering = false,
+                    error = null,
+                )
+                syncMusicService()
+            }
+            2 -> { // PAUSED
+                val current = _musicPlayerState.value
+                val reachedEnd = !userPausedYouTube &&
+                    current.currentTrack?.streamUrl?.isBlank() == true &&
+                    current.durationMs > 3000L &&
+                    current.currentPositionMs >= current.durationMs - 1500L
+                if (reachedEnd) {
+                    handleTrackEnded()
+                } else {
+                    _musicPlayerState.value = current.copy(
+                        isPlaying = false,
+                        isBuffering = false,
+                    )
+                    syncMusicService()
+                }
+            }
+            3 -> { // BUFFERING
+                _musicPlayerState.value = _musicPlayerState.value.copy(
+                    isBuffering = true,
+                )
+            }
+            0 -> { // ENDED
+                handleTrackEnded()
+            }
+        }
+    }
+
+    private fun handleTrackEnded() {
+        val now = System.currentTimeMillis()
+        if (now - lastTrackAdvanceTimestampMs < 1500L) {
+            return
+        }
+        lastTrackAdvanceTimestampMs = now
+        _musicPlayerState.value = _musicPlayerState.value.copy(
+            isPlaying = false,
+            isBuffering = false,
+        )
+        playNextTrack()
+    }
+
+    fun onYouTubeCurrentSecond(second: Float) {
+        val currentTrack = _musicPlayerState.value.currentTrack
+        if (currentTrack != null && currentTrack.streamUrl.isBlank()) {
+            _musicPlayerState.value = _musicPlayerState.value.copy(
+                currentPositionMs = (second * 1000).toLong(),
+            )
+        }
+    }
+
+    fun onYouTubeVideoDuration(duration: Float) {
+        val currentTrack = _musicPlayerState.value.currentTrack
+        if (currentTrack != null && currentTrack.streamUrl.isBlank()) {
+            _musicPlayerState.value = _musicPlayerState.value.copy(
+                durationMs = (duration * 1000).toLong(),
+            )
+        }
+    }
+
+    fun onYouTubeError(errorCode: Int) {
+        android.util.Log.e("RareMusic", "YouTube player error code: $errorCode")
+        val msg = when (errorCode) {
+            101, 150 -> "Video tidak mengizinkan pemutaran embed"
+            100 -> "Video YouTube tidak ditemukan"
+            2 -> "Parameter video tidak valid"
+            else -> "Error pemutaran YouTube ($errorCode)"
+        }
+        _musicPlayerState.value = _musicPlayerState.value.copy(
+            isBuffering = false,
+            isPlaying = false,
+            error = msg,
+        )
+    }
+
+    fun setPlaybackOrderMode(mode: PlaybackOrderMode) {
+        val currentState = _musicPlayerState.value
+        if (currentState.playbackOrderMode == mode) return
+        musicRepository.savePlaybackOrderMode(getApplication(), mode)
+        _musicPlayerState.value = currentState.copy(playbackOrderMode = mode)
+        if (mode == PlaybackOrderMode.SHUFFLE) {
+            val activeQueue = currentState.queue.ifEmpty { _musicSearchResults.value }
+            if (activeQueue.isNotEmpty()) {
+                shuffledTrackIds = buildShuffledIds(
+                    queue = activeQueue,
+                    anchorFirstId = currentState.currentTrack?.id,
+                )
+                shuffledQueueSignature = activeQueue.map { it.id }
+            }
+        }
+    }
+
+    fun togglePlaybackOrderMode() {
+        val nextMode = if (_musicPlayerState.value.playbackOrderMode == PlaybackOrderMode.SHUFFLE) {
+            PlaybackOrderMode.SEQUENTIAL
+        } else {
+            PlaybackOrderMode.SHUFFLE
+        }
+        setPlaybackOrderMode(nextMode)
+    }
+
+    fun playPlaylist(tracks: List<MusicTrack>, shuffle: Boolean) {
+        if (tracks.isEmpty()) return
+        val mode = if (shuffle) PlaybackOrderMode.SHUFFLE else PlaybackOrderMode.SEQUENTIAL
+        musicRepository.savePlaybackOrderMode(getApplication(), mode)
+        _musicPlayerState.value = _musicPlayerState.value.copy(playbackOrderMode = mode)
+
+        if (shuffle) {
+            shuffledTrackIds = buildShuffledIds(tracks)
+            shuffledQueueSignature = tracks.map { it.id }
+            val firstTrack = tracks.find { it.id == shuffledTrackIds.firstOrNull() } ?: tracks.first()
+            playTrack(firstTrack, tracks, preserveShuffleOrder = true)
+        } else {
+            playTrack(tracks.first(), tracks, preserveShuffleOrder = false)
+        }
+    }
+
+    fun playTrack(
+        track: MusicTrack,
+        queue: List<MusicTrack>? = null,
+        preserveShuffleOrder: Boolean = false,
+    ) {
+        viewModelScope.launch {
+            val currentState = _musicPlayerState.value
+            val activeQueue = queue ?: currentState.queue.ifEmpty { _musicSearchResults.value }
+            userPausedYouTube = false
+            lastTrackAdvanceTimestampMs = System.currentTimeMillis()
+
+            if (!preserveShuffleOrder && currentState.playbackOrderMode == PlaybackOrderMode.SHUFFLE) {
+                shuffledTrackIds = buildShuffledIds(activeQueue, anchorFirstId = track.id)
+                shuffledQueueSignature = activeQueue.map { it.id }
+            }
+
+            _musicPlayerState.value = currentState.copy(
+                currentTrack = track,
+                isBuffering = true,
+                isPlaying = false,
+                currentPositionMs = 0L,
+                durationMs = 0L,
+                queue = activeQueue,
+                error = null,
+            )
+            syncMusicService()
+
+            android.util.Log.d("RareMusic", "playTrack: id=${track.id}, title=${track.title}, streamUrl=${track.streamUrl}")
+
+            if (track.streamUrl.isNotBlank()) {
+                // Direct MP3 stream (e.g. Nightride FM)
+                youTubeController?.pause()
+                exoPlayer?.let { player ->
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(track.streamUrl)
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(track.title)
+                                .setArtist(track.artist)
+                                .build()
+                        )
+                        .build()
+                    player.setMediaItem(mediaItem)
+                    player.prepare()
+                    player.play()
+                }
+            } else {
+                // Native YouTube stream via embedded player
+                exoPlayer?.stop()
+                exoPlayer?.clearMediaItems()
+                val controller = youTubeController
+                if (controller != null) {
+                    controller.loadVideo(track.id)
+                } else {
+                    pendingYouTubeVideoId = track.id
+                }
+            }
+        }
+    }
+
+    fun resumePlayback() {
+        val currentTrack = _musicPlayerState.value.currentTrack ?: return
+        if (currentTrack.streamUrl.isBlank()) {
+            userPausedYouTube = false
+            youTubeController?.play()
+        } else {
+            exoPlayer?.let { player ->
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                    playTrack(currentTrack)
+                } else {
+                    player.play()
+                }
+            }
+        }
+    }
+
+    fun pausePlayback() {
+        val currentTrack = _musicPlayerState.value.currentTrack ?: return
+        if (currentTrack.streamUrl.isBlank()) {
+            userPausedYouTube = true
+            youTubeController?.pause()
+            _musicPlayerState.value = _musicPlayerState.value.copy(isPlaying = false, isBuffering = false)
+            syncMusicService()
+        } else {
+            exoPlayer?.pause()
+        }
+    }
+
+    fun stopMusicPlayback() {
+        userPausedYouTube = true
+        youTubeController?.pause()
+        exoPlayer?.stop()
+        exoPlayer?.clearMediaItems()
+        stopProgressTracking()
+        _musicPlayerState.value = MusicPlayerState(
+            playbackOrderMode = _musicPlayerState.value.playbackOrderMode,
+        )
+        MusicPlaybackService.stop(getApplication())
+    }
+
+    fun togglePlayPause() {
+        if (_musicPlayerState.value.isPlaying) {
+            pausePlayback()
+        } else {
+            resumePlayback()
+        }
+    }
+
+    fun seekTo(positionMs: Long) {
+        val currentTrack = _musicPlayerState.value.currentTrack
+        if (currentTrack != null && currentTrack.streamUrl.isBlank()) {
+            youTubeController?.seekTo(positionMs / 1000f)
+        } else {
+            exoPlayer?.seekTo(positionMs)
+        }
+    }
+
+    fun playNextTrack() {
+        val state = _musicPlayerState.value
+        val currentQueue = state.queue.ifEmpty { _musicSearchResults.value }
+        if (currentQueue.isEmpty()) return
+        val currentId = state.currentTrack?.id
+
+        val nextTrack = when (state.playbackOrderMode) {
+            PlaybackOrderMode.SEQUENTIAL -> {
+                val currentIdx = currentQueue.indexOfFirst { it.id == currentId }
+                if (currentIdx in 0 until currentQueue.lastIndex) {
+                    currentQueue[currentIdx + 1]
+                } else {
+                    currentQueue.first()
+                }
+            }
+            PlaybackOrderMode.SHUFFLE -> {
+                if (currentQueue.size == 1) {
+                    currentQueue.first()
+                } else {
+                    ensureShuffleOrder(currentQueue, anchorTrackId = currentId)
+                    val idx = shuffledTrackIds.indexOf(currentId)
+                    val nextId = if (idx in 0 until shuffledTrackIds.lastIndex) {
+                        shuffledTrackIds[idx + 1]
+                    } else {
+                        val fresh = buildShuffledIds(currentQueue, avoidFirstId = currentId)
+                        shuffledTrackIds = fresh
+                        fresh.first()
+                    }
+                    currentQueue.find { it.id == nextId } ?: currentQueue.first()
+                }
+            }
+        }
+        playTrack(nextTrack, currentQueue, preserveShuffleOrder = true)
+    }
+
+    fun playPreviousTrack() {
+        val state = _musicPlayerState.value
+        val currentQueue = state.queue.ifEmpty { _musicSearchResults.value }
+        if (currentQueue.isEmpty()) return
+        val currentId = state.currentTrack?.id
+
+        val prevTrack = when (state.playbackOrderMode) {
+            PlaybackOrderMode.SEQUENTIAL -> {
+                val currentIdx = currentQueue.indexOfFirst { it.id == currentId }
+                if (currentIdx > 0) {
+                    currentQueue[currentIdx - 1]
+                } else {
+                    currentQueue.last()
+                }
+            }
+            PlaybackOrderMode.SHUFFLE -> {
+                if (currentQueue.size == 1) {
+                    currentQueue.first()
+                } else {
+                    ensureShuffleOrder(currentQueue, anchorTrackId = currentId)
+                    val idx = shuffledTrackIds.indexOf(currentId)
+                    val prevId = if (idx > 0) {
+                        shuffledTrackIds[idx - 1]
+                    } else {
+                        shuffledTrackIds.last()
+                    }
+                    currentQueue.find { it.id == prevId } ?: currentQueue.last()
+                }
+            }
+        }
+        playTrack(prevTrack, currentQueue, preserveShuffleOrder = true)
+    }
+
+    private fun ensureShuffleOrder(queue: List<MusicTrack>, anchorTrackId: String?) {
+        val signature = queue.map { it.id }
+        if (shuffledQueueSignature != signature || shuffledTrackIds.isEmpty()) {
+            shuffledTrackIds = buildShuffledIds(queue, anchorFirstId = anchorTrackId)
+            shuffledQueueSignature = signature
+        }
+    }
+
+    private fun buildShuffledIds(
+        queue: List<MusicTrack>,
+        anchorFirstId: String? = null,
+        avoidFirstId: String? = null,
+    ): List<String> {
+        val ids = queue.map { it.id }.distinct()
+        if (ids.size <= 1) return ids
+        if (anchorFirstId != null && anchorFirstId in ids) {
+            return listOf(anchorFirstId) + ids.filterNot { it == anchorFirstId }.shuffled()
+        }
+        val shuffled = ids.shuffled().toMutableList()
+        if (avoidFirstId != null && shuffled.first() == avoidFirstId) {
+            val swapIndex = (1 until shuffled.size).random()
+            val tmp = shuffled[0]
+            shuffled[0] = shuffled[swapIndex]
+            shuffled[swapIndex] = tmp
+        }
+        return shuffled
+    }
+
+    fun createPlaylist(name: String, initialTrack: MusicTrack? = null) {
+        val cleanName = name.trim()
+        if (cleanName.isBlank()) return
+        val newPlaylist = MusicPlaylist(
+            id = "playlist_${System.currentTimeMillis()}",
+            name = cleanName,
+            tracks = listOfNotNull(initialTrack),
+        )
+        val updated = _musicPlaylists.value + newPlaylist
+        _musicPlaylists.value = updated
+        musicRepository.savePlaylists(getApplication(), updated)
+    }
+
+    fun deletePlaylist(playlistId: String) {
+        val updated = _musicPlaylists.value.filterNot { it.id == playlistId }
+        _musicPlaylists.value = updated
+        musicRepository.savePlaylists(getApplication(), updated)
+    }
+
+    fun addTrackToPlaylist(playlistId: String, track: MusicTrack) {
+        val updated = _musicPlaylists.value.map { playlist ->
+            if (playlist.id == playlistId && playlist.tracks.none { it.id == track.id }) {
+                playlist.copy(tracks = playlist.tracks + track)
+            } else {
+                playlist
+            }
+        }
+        _musicPlaylists.value = updated
+        musicRepository.savePlaylists(getApplication(), updated)
+    }
+
+    fun removeTrackFromPlaylist(playlistId: String, trackId: String) {
+        val updated = _musicPlaylists.value.map { playlist ->
+            if (playlist.id == playlistId) {
+                playlist.copy(tracks = playlist.tracks.filterNot { it.id == trackId })
+            } else {
+                playlist
+            }
+        }
+        _musicPlaylists.value = updated
+        musicRepository.savePlaylists(getApplication(), updated)
     }
 
     private fun registerBatteryReceiver() {
@@ -221,6 +785,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     override fun onCleared() {
         super.onCleared()
+        stopProgressTracking()
+        MusicPlaybackService.registerCallbacks(null)
+        MusicPlaybackService.stop(getApplication())
+        exoPlayer?.release()
+        exoPlayer = null
+        youTubeController = null
         try {
             getApplication<Application>().unregisterReceiver(batteryReceiver)
         } catch (e: Exception) {
@@ -584,19 +1154,20 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun removeRecentApp(packageName: String) {
-        val updated = _recentPackageNames.value.filter { it != packageName }
+        val updated = repository.removeRecentApp(packageName).filter { it !in _hiddenApps.value }
         _recentPackageNames.value = updated
-        val array = org.json.JSONArray()
-        updated.forEach { array.put(it) }
-        getApplication<android.app.Application>()
-            .getSharedPreferences("rare_launcher_prefs", android.content.Context.MODE_PRIVATE)
-            .edit()
-            .putString("recent_apps_list", array.toString())
-            .apply()
 
         if (updated.isEmpty()) {
             _isRecentBubbleVisible.value = false
             _isRecentClusterDialogOpen.value = false
         }
+    }
+
+    fun clearAllRecentApps() {
+        val current = _recentPackageNames.value
+        repository.clearAllRecentApps(current)
+        _recentPackageNames.value = emptyList()
+        _isRecentBubbleVisible.value = false
+        _isRecentClusterDialogOpen.value = false
     }
 }

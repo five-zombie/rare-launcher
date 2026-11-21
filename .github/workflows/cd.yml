@@ -148,12 +148,12 @@ jobs:
 
             Build artifacts for **The Five Zombie Org** (Team Zombie) — `versionName: ${{ steps.meta.outputs.version }}` (`versionCode: ${{ steps.meta.outputs.version_code }}`).
 
-            | Asset | Deskripsi |
+            | Asset | Description |
             |---|---|
             | 📦 **`.aab`** | Google Play Store Distribution (Android App Bundle, Signed) |
             | 📱 **`-release.apk`** | Production Release APK (Signed with 10-Year Keystore) |
             | 🧪 **`-debug.apk`** | Development & Testing APK (Direct ADB Install) |
-            | 🔐 **`SHA256SUMS.txt`** | Checksum verifikasi integritas file |
+            | 🔐 **`SHA256SUMS.txt`** | File integrity verification checksums |
 
             > **Signing Identity**: `O=The Five Zombie Org`, `CN/OU=Team Zombie`, Validity: 10 Years (3650 days).
         env:

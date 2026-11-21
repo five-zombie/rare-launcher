@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,17 +64,20 @@ import io.github.rachmanzz.rarelauncer.ui.theme.AetherOnPrimary
 import io.github.rachmanzz.rarelauncer.ui.theme.AetherOnSurface
 import io.github.rachmanzz.rarelauncer.ui.theme.AetherOnSurfaceVariant
 import io.github.rachmanzz.rarelauncer.ui.theme.AetherPrimary
+import io.github.rachmanzz.rarelauncer.ui.theme.AetherSecondary
+import io.github.rachmanzz.rarelauncer.ui.theme.AetherTertiaryFixed
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 enum class CommunicationActionType {
     CALL,
-    MESSAGE
+    MESSAGE,
+    CONTACTS
 }
 
 @Composable
 fun SlideToCallOverlay(
-    contact: ContactItem,
+    contact: ContactItem?,
     actionType: CommunicationActionType,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
@@ -94,14 +98,44 @@ fun SlideToCallOverlay(
 
         var trackWidthPx by remember { mutableIntStateOf(0) }
         val maxOffsetPx = (trackWidthPx - thumbSizePx - trackPaddingPx * 2f).coerceAtLeast(1f)
-        val actionKey = remember(contact.id, actionType) { "${contact.id}_${actionType.name}" }
+        val actionKey = remember(contact?.id, actionType) { "${contact?.id ?: "quick"}_${actionType.name}" }
         val offsetX = remember(actionKey) { Animatable(0f) }
         var confirmed by remember(actionKey) { mutableStateOf(false) }
 
         val progress = (offsetX.value / maxOffsetPx).coerceIn(0f, 1f)
-        val isCall = actionType == CommunicationActionType.CALL
-        val actionColor = if (isCall) AetherPrimary else Color(0xFF7000FF)
-        val actionLabel = if (isCall) "PANGGIL KONTAK" else "KIRIM PESAN"
+        val actionColor = when (actionType) {
+            CommunicationActionType.CALL -> AetherPrimary
+            CommunicationActionType.MESSAGE -> AetherSecondary
+            CommunicationActionType.CONTACTS -> AetherTertiaryFixed
+        }
+        val actionIcon = when (actionType) {
+            CommunicationActionType.CALL -> Icons.Default.Call
+            CommunicationActionType.MESSAGE -> Icons.AutoMirrored.Filled.Message
+            CommunicationActionType.CONTACTS -> Icons.Default.Person
+        }
+        val thumbIconTint = when (actionType) {
+            CommunicationActionType.MESSAGE -> Color.White
+            else -> AetherOnPrimary
+        }
+        val actionLabel = when (actionType) {
+            CommunicationActionType.CALL -> if (contact != null) "CALL CONTACT" else "OPEN DIALER"
+            CommunicationActionType.MESSAGE -> if (contact != null) "SEND MESSAGE" else "OPEN MESSAGES"
+            CommunicationActionType.CONTACTS -> "OPEN CONTACTS"
+        }
+        val titleText = contact?.name ?: when (actionType) {
+            CommunicationActionType.CALL -> "Phone Dialer"
+            CommunicationActionType.MESSAGE -> "Messages"
+            CommunicationActionType.CONTACTS -> "Contacts"
+        }
+        val subtitleText = if (contact != null) {
+            if (contact.phoneNumber.isNotEmpty()) contact.phoneNumber else contact.subtitle
+        } else {
+            when (actionType) {
+                CommunicationActionType.CALL -> "Quick Action • Call"
+                CommunicationActionType.MESSAGE -> "Quick Action • Message"
+                CommunicationActionType.CONTACTS -> "Quick Action • Contacts"
+            }
+        }
 
         Box(
             modifier = modifier
@@ -129,7 +163,7 @@ fun SlideToCallOverlay(
                     .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // Contact Avatar Icon
+                // Avatar / Action Icon
                 Box(
                     modifier = Modifier
                         .size(56.dp)
@@ -138,19 +172,28 @@ fun SlideToCallOverlay(
                         .border(1.dp, actionColor.copy(alpha = 0.5f), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = contact.initials,
-                        color = actionColor,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    if (contact != null) {
+                        Text(
+                            text = contact.initials,
+                            color = actionColor,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = actionIcon,
+                            contentDescription = titleText,
+                            tint = actionColor,
+                            modifier = Modifier.size(26.dp),
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Contact Name
+                // Contact Name / Quick Action Title
                 Text(
-                    text = contact.name,
+                    text = titleText,
                     color = AetherOnSurface,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -160,9 +203,9 @@ fun SlideToCallOverlay(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Phone number
+                // Phone number / Quick Action Subtitle
                 Text(
-                    text = if (contact.phoneNumber.isNotEmpty()) contact.phoneNumber else contact.subtitle,
+                    text = subtitleText,
                     color = AetherOnSurfaceVariant,
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace,
@@ -212,7 +255,7 @@ fun SlideToCallOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Geser untuk $actionLabel",
+                            text = "Slide to $actionLabel",
                             color = AetherOnSurfaceVariant.copy(alpha = 0.75f),
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
@@ -289,9 +332,9 @@ fun SlideToCallOverlay(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = if (isCall) Icons.Default.Call else Icons.AutoMirrored.Filled.Message,
+                            imageVector = actionIcon,
                             contentDescription = actionLabel,
-                            tint = AetherOnPrimary,
+                            tint = thumbIconTint,
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -299,9 +342,9 @@ fun SlideToCallOverlay(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Batal Button
+                // Cancel Button
                 Text(
-                    text = "Batal",
+                    text = "Cancel",
                     color = AetherOnSurfaceVariant.copy(alpha = 0.7f),
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace,

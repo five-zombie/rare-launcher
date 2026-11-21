@@ -114,7 +114,7 @@ class AppLockActivity : FragmentActivity() {
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = "Verifikasi sidik jari atau PIN untuk membuka aplikasi ini",
+                            text = "Verify your fingerprint or PIN to open this app",
                             color = AetherOnSurfaceVariant,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center,
@@ -136,7 +136,7 @@ class AppLockActivity : FragmentActivity() {
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    text = "Verifikasi Sekarang",
+                                    text = "Verify Now",
                                     color = AetherOnPrimary,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
@@ -153,7 +153,7 @@ class AppLockActivity : FragmentActivity() {
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
-                                    text = "Kembali ke Home",
+                                    text = "Back to Home",
                                     color = AetherOnSurfaceVariant,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Medium,

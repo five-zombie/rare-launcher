@@ -1,40 +1,46 @@
 # 🌌 Rare Launcer
 
 > **Aether Cyberpunk & Minimalist Android Launcher**  
-> Custom launcher modern berbasis Android yang dibangun dengan **Jetpack Compose**, mengutamakan estetika futuristik minimalis, performa ringan tanpa *overheating*, dan fitur multitasking berbasis gestur.
+> A modern custom Android launcher built with **Jetpack Compose**, prioritizing minimalist futuristic aesthetics, lightweight performance without overheating, and gesture-driven multitasking.
 
 ---
 
-## ✨ Fitur Utama
+## ✨ Key Features
 
-- **⏱️ Horizon Clock & Battery Capsule**: Jam digital arsitektural minimalis dengan indikator baterai, tanggal cerdas, dan deteksi status pengisian daya yang hemat daya (0% CPU di latar belakang).
-- **🫧 Sticky Recent App Bubbles (Balon Aplikasi)**:
-  - Balon gelembung organik yang saling bersinggungan di pojok kiri atas saat Anda baru saja kembali ke layar beranda.
-  - Menampilkan kluster aplikasi yang terakhir dibuka.
-  - **1-Tap Dialog**: Ketuk balon untuk membuka panel multitasking langsung (*Switch App*, *Force Close / App Info*, atau *Hapus dari riwayat*).
-  - Dilengkapi *Auto-Fade* otomatis (menghilang sendiri setelah 8 detik).
+- **⏱️ Horizon Clock & Battery Capsule**: Minimalist architectural digital clock with battery indicator, smart date display, and power-efficient charging status detection (0% background CPU usage).
+- **🫧 Sticky Recent App Bubbles**:
+  - Organic overlapping bubble cluster in the top-left corner when you return to the home screen.
+  - Displays the most recently opened app cluster.
+  - **1-Tap Dialog**: Tap the bubble to open a direct multitasking panel (*Switch App*, *Force Close / App Info*, or *Remove from recents*).
+  - Includes automatic *Auto-Fade* (disappears automatically after 8 seconds).
 - **📂 Workspace Directory & Fast Popover**:
-  - 1 kartu direktori aplikasi utama di layar beranda (maksimal 4 slot aplikasi pilihan).
-  - Dialog popover mengambang untuk mengelola, menambah, atau mengganti shortcut aplikasi favorit secara instan.
+  - 1 primary app directory card on the home screen (up to 4 chosen app slots).
+  - Floating popover dialog to manage, add, or swap favorite app shortcuts instantly.
 - **🔐 Biometric Hidden Vault & App Lock**:
-  - Sembunyikan aplikasi privat dari laci aplikasi utama dan amankan dengan sidik jari / PIN.
-  - Fitur kunci aplikasi per-aplikasi (*App Lock*) yang tetap aktif saat dibuka lewat notifikasi atau switcher.
+  - Hide private apps from the main app drawer and secure them with fingerprint / PIN.
+  - Per-app lock (*App Lock*) that stays enforced even when launched from notifications or Recent Apps.
+- **🎵 Cyber Stream Online Music Player (YouTube Music)**:
+  - **Swipe Left-to-Right**: Slide from left to open the cyber music streaming drawer.
+  - Cari jutaan lagu online secara gratis tanpa iklan dan tanpa API key berbayar.
+  - Dilengkapi starter pack radio synthwave/cyberpunk & lofi 24/7.
+  - Powered by **Media3 ExoPlayer**: Mendukung background audio playback saat membuka app lain atau layar mati.
+  - Mini player interaktif dengan play/pause, next/prev, dan progress bar.
 - **📞 Communication & Speed Dial Hub**:
-  - Geser ke kanan (*swipe right*) untuk membuka laci komunikasi cepat.
-  - Dilengkapi fitur pengaman **Slide-to-Call** (geser kanan untuk memanggil) agar terhindar dari salah pencet nomor.
-  - Terintegrasi dengan Kontak Perangkat dan Riwayat Panggilan Cepat.
+  - **Swipe Right-to-Left**: Slide from right to open the quick communication drawer.
+  - Equipped with a **Slide-to-Call** safety confirmation (slide right to call) to prevent accidental dialing.
+  - Integrated with Device Contacts and Recent Call Log.
 - **⚡ Super Optimized for Low-End Chipsets**:
-  - Animasi dirender via RenderThread tanpa beban rekursif recomposition 120Hz.
-  - Background Service adaptif: otomatis mematikan polling IPC saat tidak ada aplikasi yang dikunci di Vault.
-  - Tidak memotong gestur status bar / notifikasi bawaan HP.
+  - Animations rendered via RenderThread without 120Hz recursive recomposition overhead.
+  - Adaptive Background Service: automatically disables IPC polling when no apps are locked in the Vault.
+  - Preserves native system status bar / notification shade gestures.
 
 ---
 
 ## 🛠️ Tech Stack & Requirements
 
-| Komponen | Spesifikasi |
+| Component | Specification |
 |---|---|
-| **Bahasa** | Kotlin 2.2.10 |
+| **Language** | Kotlin 2.2.10 |
 | **UI Toolkit** | Jetpack Compose (BOM 2026.02.01) + Material 3 |
 | **Min SDK** | Android 8.0 (API 26) |
 | **Target / Compile SDK** | Android 16 (API 37) |
@@ -43,51 +49,51 @@
 
 ---
 
-## 🚀 Memulai (Local Setup)
+## 🚀 Getting Started (Local Setup)
 
-### 1. Clone Repositori
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/rachmanzz/rarelauncer.git
 cd rarelauncer
 ```
 
 ### 2. Build Debug APK
-Pastikan Anda memiliki JDK 21+ dan Android SDK:
+Make sure you have JDK 21+ and the Android SDK installed:
 ```bash
 ./gradlew assembleDebug
 ```
-File APK debug akan dihasilkan di: `app/build/outputs/apk/debug/app-debug.apk`
+The debug APK will be generated at: `app/build/outputs/apk/debug/app-debug.apk`
 
-### 3. Jalankan Pengujian
+### 3. Run Unit Tests
 ```bash
 ./gradlew testDebugUnitTest
 ```
 
-### 4. Pasang ke Perangkat via ADB
+### 4. Install on Device via ADB
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-*Tips: Buka **Pengaturan HP > Aplikasi > Aplikasi Default > Aplikasi Beranda (Home App)** dan pilih **Rare Launcer** sebagai peluncur utama.*
+*Tip: Open **Device Settings > Apps > Default Apps > Home App** and select **Rare Launcer** as your default launcher.*
 
 ---
 
 ## ⚙️ CI/CD (GitHub Actions)
 
-Repositori ini dilengkapi dengan pipeline otomatis:
-- **CI (`.github/workflows/ci.yml`)**: Berjalan di setiap `push` dan `pull_request` pada branch `main` untuk menjalankan Unit Tests dan mengompilasi APK Debug.
-- **CD (`.github/workflows/cd.yml`)**: Berjalan otomatis saat ada tag versi baru (misal `v1.0.0`) atau lewat manual trigger (*workflow_dispatch*):
-  - Menggunakan Environment GitHub: `ANDROID_ENV` dengan Secret `ANDROID_APP_SECRET`.
-  - Otomatis men-generate Keystore bersertifikat resmi 10 tahun (3650 hari) atas nama **The Five Zombie Org** (*Team Zombie*).
-  - Melakukan signing resmi untuk:
-    - 📦 **`.aab`** (Android App Bundle resmi untuk Google Play Store).
-    - 📱 **`-release.apk`** (Release APK bertanda tangan resmi).
+This repository includes automated pipelines:
+- **CI (`.github/workflows/ci.yml`)**: Runs on every `push` and `pull_request` to the `main` branch to execute Unit Tests and compile the Debug APK.
+- **CD (`.github/workflows/cd.yml`)**: Runs automatically when a new version tag is pushed (e.g., `v1.0.0`) or via manual trigger (*workflow_dispatch*):
+  - Uses GitHub Environment `ANDROID_ENV` with Secret `ANDROID_APP_SECRET`.
+  - Automatically generates an official 10-year (3650-day) certificate keystore for **The Five Zombie Org** (*Team Zombie*).
+  - Performs official signing for:
+    - 📦 **`.aab`** (Official Android App Bundle for Google Play Store).
+    - 📱 **`-release.apk`** (Officially signed Release APK).
     - 🧪 **`-debug.apk`** (Testing APK).
-    - 🔐 **`SHA256SUMS.txt`** (Checksum integritas berkas).
-  - Otomatis mempublikasikan seluruh berkas tersebut langsung ke **GitHub Releases**.
+    - 🔐 **`SHA256SUMS.txt`** (File integrity verification checksums).
+  - Automatically publishes all artifacts directly to **GitHub Releases**.
 
 ---
 
-## 📄 Lisensi & Kontributor
+## 📄 License & Contributors
 
-Dikelola dan dikembangkan oleh **Zombie Teams** (`fivezombieorg@gmail.com`).  
-Dirilis di bawah lisensi MIT atau sesuai kebijakan repositori.
+Maintained and developed by **Zombie Teams** (`fivezombieorg@gmail.com`).  
+Released under the MIT license or according to repository policy.

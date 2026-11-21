@@ -180,9 +180,9 @@ fun SlideToOpenOverlay(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = if (isLocked) {
-                                "Geser ke kanan lalu verifikasi sidik jari / PIN"
+                                "Slide right then verify fingerprint / PIN"
                             } else {
-                                "Geser kiri ke kanan untuk membuka"
+                                "Slide left to right to open"
                             },
                             color = AetherOnSurfaceVariant,
                             fontSize = 12.sp,
@@ -312,7 +312,7 @@ fun SlideToOpenOverlay(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "Batal",
+                    text = "Cancel",
                     color = AetherOnSurfaceVariant,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -67,6 +68,7 @@ fun ClockAndHeader(
     onClockClicked: () -> Unit,
     onDateClicked: () -> Unit,
     onOpenCommClicked: () -> Unit,
+    onOpenMusicClicked: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -106,7 +108,7 @@ fun ClockAndHeader(
                     )
                 }
 
-                // Recent Apps Organic Sticky Bubble Cluster (Overlapping Balon Bulat)
+                // Recent Apps Organic Sticky Bubble Cluster (Overlapping Round Bubbles)
                 androidx.compose.animation.AnimatedVisibility(
                     visible = isRecentBubbleVisible && recentBubbleApps.isNotEmpty(),
                     enter = fadeIn() + slideInHorizontally { -it / 2 },
@@ -256,30 +258,61 @@ fun ClockAndHeader(
                 )
             }
 
-            // Quick Right Slide Trigger Button (COMM >)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(9999.dp))
-                    .background(AetherGlassBg)
-                    .border(1.dp, AetherGlassBorder, RoundedCornerShape(9999.dp))
-                    .clickable { onOpenCommClicked() }
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = "COMM",
-                    color = AetherOnSurfaceVariant,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Communication Hub",
-                    tint = AetherPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Quick Left Slide Trigger Button (< MUSIC)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9999.dp))
+                        .background(AetherGlassBg)
+                        .border(1.dp, AetherGlassBorderSubtle, RoundedCornerShape(9999.dp))
+                        .clickable { onOpenMusicClicked() }
+                        .padding(horizontal = 10.dp, vertical = 7.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.GraphicEq,
+                        contentDescription = "Music Player",
+                        tint = AetherPrimary,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "MUSIC",
+                        color = AetherPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Quick Right Slide Trigger Button (COMM >)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9999.dp))
+                        .background(AetherGlassBg)
+                        .border(1.dp, AetherGlassBorder, RoundedCornerShape(9999.dp))
+                        .clickable { onOpenCommClicked() }
+                        .padding(horizontal = 10.dp, vertical = 7.dp)
+                ) {
+                    Text(
+                        text = "COMM",
+                        color = AetherOnSurfaceVariant,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Communication Hub",
+                        tint = AetherPrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
 

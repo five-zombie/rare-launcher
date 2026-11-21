@@ -21,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,6 +32,9 @@ import io.github.rachmanzz.rarelauncer.data.model.AppDirectory
 import io.github.rachmanzz.rarelauncer.data.model.AppItem
 import io.github.rachmanzz.rarelauncer.data.model.AtmospherePreset
 import io.github.rachmanzz.rarelauncer.data.model.ContactItem
+import io.github.rachmanzz.rarelauncer.data.model.MusicPlayerState
+import io.github.rachmanzz.rarelauncer.data.model.MusicPlaylist
+import io.github.rachmanzz.rarelauncer.data.model.MusicTrack
 import io.github.rachmanzz.rarelauncer.data.model.WallpaperConfig
 import io.github.rachmanzz.rarelauncer.ui.components.AllAppsDrawer
 import io.github.rachmanzz.rarelauncer.ui.components.AppDirectorySection
@@ -38,6 +42,7 @@ import io.github.rachmanzz.rarelauncer.ui.components.AtmosphericBackground
 import io.github.rachmanzz.rarelauncer.ui.components.ClockAndHeader
 import io.github.rachmanzz.rarelauncer.ui.components.CommunicationDrawer
 import io.github.rachmanzz.rarelauncer.ui.components.FolderPopoverDialog
+import io.github.rachmanzz.rarelauncer.ui.components.MusicPlayerDrawer
 import io.github.rachmanzz.rarelauncer.ui.components.QuickRecentsDrawer
 import io.github.rachmanzz.rarelauncer.ui.components.RecentAppsBubbleDialog
 import io.github.rachmanzz.rarelauncer.ui.components.ScrollCueIndicator
@@ -45,6 +50,7 @@ import io.github.rachmanzz.rarelauncer.ui.components.SlideToOpenOverlay
 import io.github.rachmanzz.rarelauncer.ui.theme.RareLauncerTheme
 import io.github.rachmanzz.rarelauncer.ui.viewmodel.ClockUiState
 import io.github.rachmanzz.rarelauncer.ui.viewmodel.DrawerTab
+import io.github.rachmanzz.rarelauncer.data.model.YouTubeWebController
 import io.github.rachmanzz.rarelauncer.ui.viewmodel.LauncherViewModel
 import kotlin.math.abs
 
@@ -69,6 +75,12 @@ fun LauncherScreen(
     val filteredApps by viewModel.filteredApps.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val isCommDrawerOpen by viewModel.isCommDrawerOpen.collectAsState()
+    val isMusicDrawerOpen by viewModel.isMusicDrawerOpen.collectAsState()
+    val musicPlayerState by viewModel.musicPlayerState.collectAsState()
+    val musicSearchQuery by viewModel.musicSearchQuery.collectAsState()
+    val musicSearchResults by viewModel.musicSearchResults.collectAsState()
+    val isSearchingMusic by viewModel.isSearchingMusic.collectAsState()
+    val musicPlaylists by viewModel.musicPlaylists.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val hasContactsPermission by viewModel.hasContactsPermission.collectAsState()
     val drawerTab by viewModel.drawerTab.collectAsState()
@@ -88,10 +100,11 @@ fun LauncherScreen(
     // Handle back button hierarchically
     BackHandler(enabled = true) {
         when {
+            isMusicDrawerOpen -> viewModel.closeMusicDrawer()
+            isCommDrawerOpen -> viewModel.closeCommDrawer()
             isQuickRecentsOpen -> viewModel.closeQuickRecents()
             isFolderPopoverOpen -> viewModel.closeFolderPopover()
             isAppDrawerOpen -> viewModel.closeAppDrawer()
-            isCommDrawerOpen -> viewModel.closeCommDrawer()
             else -> {
                 // Stay on launcher home
             }
@@ -112,6 +125,31 @@ fun LauncherScreen(
         filteredApps = filteredApps,
         searchQuery = searchQuery,
         isCommDrawerOpen = isCommDrawerOpen,
+        isMusicDrawerOpen = isMusicDrawerOpen,
+        musicPlayerState = musicPlayerState,
+        musicSearchQuery = musicSearchQuery,
+        musicSearchResults = musicSearchResults,
+        isSearchingMusic = isSearchingMusic,
+        musicPlaylists = musicPlaylists,
+        onOpenMusicDrawer = { viewModel.openMusicDrawer() },
+        onCloseMusicDrawer = { viewModel.closeMusicDrawer() },
+        onMusicSearchQueryChange = { viewModel.onMusicSearchQueryChange(it) },
+        onClearMusicSearch = { viewModel.clearMusicSearch() },
+        onTrackSelected = { track, queue -> viewModel.playTrack(track, queue) },
+        onPlayPlaylist = { tracks, shuffle -> viewModel.playPlaylist(tracks, shuffle) },
+        onTogglePlaybackOrderMode = { viewModel.togglePlaybackOrderMode() },
+        onCreatePlaylist = { name, initialTrack -> viewModel.createPlaylist(name, initialTrack) },
+        onDeletePlaylist = { viewModel.deletePlaylist(it) },
+        onAddTrackToPlaylist = { playlistId, track -> viewModel.addTrackToPlaylist(playlistId, track) },
+        onRemoveTrackFromPlaylist = { playlistId, trackId -> viewModel.removeTrackFromPlaylist(playlistId, trackId) },
+        onTogglePlayPause = { viewModel.togglePlayPause() },
+        onNextTrack = { viewModel.playNextTrack() },
+        onPreviousTrack = { viewModel.playPreviousTrack() },
+        onYouTubePlayerReady = { viewModel.setYouTubeController(it) },
+        onYouTubeStateChange = { viewModel.onYouTubePlayerStateChanged(it) },
+        onYouTubeCurrentSecond = { viewModel.onYouTubeCurrentSecond(it) },
+        onYouTubeDuration = { viewModel.onYouTubeVideoDuration(it) },
+        onYouTubeError = { viewModel.onYouTubeError(it) },
         contacts = contacts,
         hasContactsPermission = hasContactsPermission,
         drawerTab = drawerTab,
@@ -178,6 +216,7 @@ fun LauncherScreen(
         onOpenRecentClusterDialog = { viewModel.openRecentClusterDialog() },
         onCloseRecentClusterDialog = { viewModel.closeRecentClusterDialog() },
         onRemoveFromRecents = { pkg -> viewModel.removeRecentApp(pkg) },
+        onClearAllRecents = { viewModel.clearAllRecentApps() },
         onDismissRecentBubble = { viewModel.dismissRecentBubble() },
         quickSearchResults = quickSearchResults,
         bookmarkedPackageNames = bookmarkedPackageNames,
@@ -206,10 +245,10 @@ fun LauncherScreen(
     if (showUsageAccessDialog) {
         AlertDialog(
             onDismissRequest = { showUsageAccessDialog = false },
-            title = { Text(text = "Aktifkan Usage Access") },
+            title = { Text(text = "Enable Usage Access") },
             text = {
                 Text(
-                    text = "Agar aplikasi yang dikunci tetap meminta verifikasi saat dibuka lewat notifikasi atau Recent Apps, izinkan Usage Access untuk Rare Launcer.",
+                    text = "To ensure locked apps still require verification when opened via notifications or Recent Apps, allow Usage Access for Rare Launcer.",
                 )
             },
             confirmButton = {
@@ -219,12 +258,12 @@ fun LauncherScreen(
                         onRequestUsageStatsPermission()
                     },
                 ) {
-                    Text(text = "Buka Pengaturan")
+                    Text(text = "Open Settings")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showUsageAccessDialog = false }) {
-                    Text(text = "Nanti")
+                    Text(text = "Later")
                 }
             },
         )
@@ -277,6 +316,7 @@ fun LauncherContent(
     onOpenRecentClusterDialog: () -> Unit = {},
     onCloseRecentClusterDialog: () -> Unit = {},
     onRemoveFromRecents: (String) -> Unit = {},
+    onClearAllRecents: () -> Unit = {},
     onDismissRecentBubble: () -> Unit = {},
     quickSearchResults: List<AppItem> = emptyList(),
     bookmarkedPackageNames: List<String> = emptyList(),
@@ -289,6 +329,31 @@ fun LauncherContent(
     onRemoveAppFromDirectory: (packageName: String) -> Unit,
     onToggleAppInDirectory: (packageName: String) -> Unit,
     onClearDirectory: () -> Unit,
+    isMusicDrawerOpen: Boolean = false,
+    musicPlayerState: MusicPlayerState = MusicPlayerState(),
+    musicSearchQuery: String = "",
+    musicSearchResults: List<MusicTrack> = emptyList(),
+    isSearchingMusic: Boolean = false,
+    musicPlaylists: List<MusicPlaylist> = emptyList(),
+    onOpenMusicDrawer: () -> Unit = {},
+    onCloseMusicDrawer: () -> Unit = {},
+    onMusicSearchQueryChange: (String) -> Unit = {},
+    onClearMusicSearch: () -> Unit = {},
+    onTrackSelected: (MusicTrack, List<MusicTrack>) -> Unit = { _, _ -> },
+    onPlayPlaylist: (List<MusicTrack>, Boolean) -> Unit = { _, _ -> },
+    onTogglePlaybackOrderMode: () -> Unit = {},
+    onCreatePlaylist: (String, MusicTrack?) -> Unit = { _, _ -> },
+    onDeletePlaylist: (String) -> Unit = {},
+    onAddTrackToPlaylist: (String, MusicTrack) -> Unit = { _, _ -> },
+    onRemoveTrackFromPlaylist: (String, String) -> Unit = { _, _ -> },
+    onTogglePlayPause: () -> Unit = {},
+    onNextTrack: () -> Unit = {},
+    onPreviousTrack: () -> Unit = {},
+    onYouTubePlayerReady: (YouTubeWebController) -> Unit = {},
+    onYouTubeStateChange: (Int) -> Unit = {},
+    onYouTubeCurrentSecond: (Float) -> Unit = {},
+    onYouTubeDuration: (Float) -> Unit = {},
+    onYouTubeError: (Int) -> Unit = {},
     onOpenCommClicked: () -> Unit,
     onCloseCommClicked: () -> Unit,
     onAppClicked: (AppItem) -> Unit,
@@ -303,6 +368,10 @@ fun LauncherContent(
 ) {
     var pendingLaunchApp by remember { mutableStateOf<AppItem?>(null) }
     val requestAppLaunch: (AppItem) -> Unit = { app -> pendingLaunchApp = app }
+    val currentAppDrawerOpen by rememberUpdatedState(isAppDrawerOpen)
+    val currentQuickRecentsOpen by rememberUpdatedState(isQuickRecentsOpen)
+    val currentMusicDrawerOpen by rememberUpdatedState(isMusicDrawerOpen)
+    val currentCommDrawerOpen by rememberUpdatedState(isCommDrawerOpen)
 
     Box(
         modifier = modifier
@@ -338,22 +407,31 @@ fun LauncherContent(
                             val absY = abs(accumulatedY)
 
                             // Threshold to determine intention (lower threshold for faster response)
-                            if (absX >= 20f || absY >= 20f) {
+                            if (absX >= 25f || absY >= 25f) {
                                 gestureDecided = true
                                 if (absY >= absX) {
                                     // VERTICAL: swipe up (< 0) opens All Apps drawer.
-                                    // Swipe down is left to Android system for Status Bar / Notification shade.
                                     if (accumulatedY < -20f) {
-                                        if (!isAppDrawerOpen && !isQuickRecentsOpen) {
+                                        if (!currentAppDrawerOpen && !currentQuickRecentsOpen && !currentMusicDrawerOpen && !currentCommDrawerOpen) {
                                             onOpenAppDrawer()
                                         }
                                     }
-                                } else if (absX > absY * 1.5f) {
-                                    // Strictly HORIZONTAL swipe to right: Opens Communication Hub
-                                    if (accumulatedX > 35f && !isCommDrawerOpen) {
-                                        onOpenCommClicked()
-                                    } else if (accumulatedX < -35f && isCommDrawerOpen) {
-                                        onCloseCommClicked()
+                                } else {
+                                    // HORIZONTAL:
+                                    // Swipe LEFT to RIGHT: Opens Cyber Stream Music Player (or closes Comm)
+                                    // Swipe RIGHT to LEFT: Opens Communication Hub (or closes Music)
+                                    if (accumulatedX > 20f) {
+                                        if (currentCommDrawerOpen) {
+                                            onCloseCommClicked()
+                                        } else if (!currentMusicDrawerOpen) {
+                                            onOpenMusicDrawer()
+                                        }
+                                    } else if (accumulatedX < -20f) {
+                                        if (currentMusicDrawerOpen) {
+                                            onCloseMusicDrawer()
+                                        } else if (!currentCommDrawerOpen) {
+                                            onOpenCommClicked()
+                                        }
                                     }
                                 }
                             }
@@ -396,7 +474,8 @@ fun LauncherContent(
                         onPickCustomWallpaper = onPickCustomWallpaper,
                         onClockClicked = onClockClicked,
                         onDateClicked = onDateClicked,
-                        onOpenCommClicked = onOpenCommClicked
+                        onOpenCommClicked = onOpenCommClicked,
+                        onOpenMusicClicked = onOpenMusicDrawer
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -473,6 +552,7 @@ fun LauncherContent(
                 onAppClicked = requestAppLaunch,
                 onAppInfoClicked = onAppInfoClicked,
                 onRemoveFromRecents = onRemoveFromRecents,
+                onClearAllRecents = onClearAllRecents,
             )
         }
 
@@ -491,6 +571,34 @@ fun LauncherContent(
             onAppClicked = requestAppLaunch,
             onToggleBookmark = onToggleBookmark,
             onClose = onCloseQuickRecents,
+        )
+
+        // Persistent Music Player Drawer (Slide left-to-right) - stays composed for background streaming
+        MusicPlayerDrawer(
+            isOpen = isMusicDrawerOpen && !isAppDrawerOpen && !isQuickRecentsOpen,
+            playerState = musicPlayerState,
+            searchQuery = musicSearchQuery,
+            searchResults = musicSearchResults,
+            isSearching = isSearchingMusic,
+            playlists = musicPlaylists,
+            onClose = onCloseMusicDrawer,
+            onSearchQueryChange = onMusicSearchQueryChange,
+            onClearSearch = onClearMusicSearch,
+            onTrackSelected = onTrackSelected,
+            onPlayPlaylist = onPlayPlaylist,
+            onTogglePlaybackOrderMode = onTogglePlaybackOrderMode,
+            onCreatePlaylist = onCreatePlaylist,
+            onDeletePlaylist = onDeletePlaylist,
+            onAddTrackToPlaylist = onAddTrackToPlaylist,
+            onRemoveTrackFromPlaylist = onRemoveTrackFromPlaylist,
+            onTogglePlayPause = onTogglePlayPause,
+            onNextTrack = onNextTrack,
+            onPreviousTrack = onPreviousTrack,
+            onYouTubePlayerReady = onYouTubePlayerReady,
+            onYouTubeStateChange = onYouTubeStateChange,
+            onYouTubeCurrentSecond = onYouTubeCurrentSecond,
+            onYouTubeDuration = onYouTubeDuration,
+            onYouTubeError = onYouTubeError,
         )
 
         // Quick Action Communication Drawer (Slide to right hub) - strictly hidden when App Drawer or Quick Recents is open

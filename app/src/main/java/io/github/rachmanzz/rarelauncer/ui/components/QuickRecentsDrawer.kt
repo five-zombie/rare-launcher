@@ -183,26 +183,40 @@ fun QuickRecentsDrawer(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    text = "Search all applications...",
-                                    color = AetherOnSurfaceVariant.copy(alpha = 0.6f),
-                                    fontSize = 13.sp
-                                )
+                        val searchTextStyle = TextStyle(
+                            color = AetherOnSurface,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            fontWeight = FontWeight.Normal,
+                            fontFamily = FontFamily.Default,
+                            letterSpacing = 0.sp
+                        )
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = onSearchQueryChange,
+                            singleLine = true,
+                            textStyle = searchTextStyle,
+                            cursorBrush = SolidColor(AetherPrimary),
+                            modifier = Modifier.weight(1f),
+                            decorationBox = { innerTextField ->
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text(
+                                            text = "Search all applications...",
+                                            style = searchTextStyle.copy(
+                                                color = AetherOnSurfaceVariant.copy(alpha = 0.6f)
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    innerTextField()
+                                }
                             }
-                            BasicTextField(
-                                value = searchQuery,
-                                onValueChange = onSearchQueryChange,
-                                singleLine = true,
-                                textStyle = TextStyle(
-                                    color = AetherOnSurface,
-                                    fontSize = 13.sp
-                                ),
-                                cursorBrush = SolidColor(AetherPrimary),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                        )
                         if (searchQuery.isNotEmpty()) {
                             IconButton(
                                 onClick = onClearSearch,
@@ -319,13 +333,13 @@ fun QuickRecentsDrawer(
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Icon(
                                                     imageVector = Icons.Default.Add,
-                                                    contentDescription = "Pilih",
+                                                    contentDescription = "Select",
                                                     tint = AetherPrimary,
                                                     modifier = Modifier.size(12.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(3.dp))
                                                 Text(
-                                                    text = "Pilih",
+                                                    text = "Select",
                                                     color = AetherPrimary,
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.SemiBold
@@ -360,7 +374,7 @@ fun QuickRecentsDrawer(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "Ketuk untuk memilih aplikasi Bookmark",
+                                                text = "Tap to select Bookmark apps",
                                                 color = AetherPrimary,
                                                 fontSize = 12.sp,
                                                 textAlign = TextAlign.Center
@@ -436,7 +450,7 @@ fun QuickRecentsDrawer(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "Belum ada aplikasi yang baru dibuka",
+                                        text = "No recently opened apps yet",
                                         color = AetherOnSurfaceVariant.copy(alpha = 0.6f),
                                         fontSize = 12.sp
                                     )
@@ -467,7 +481,7 @@ fun QuickRecentsDrawer(
         AlertDialog(
             onDismissRequest = { selectedAppForMenu = null },
             title = { Text(text = app.label) },
-            text = { Text(text = "Pilih aksi untuk aplikasi:") },
+            text = { Text(text = "Choose an action for this app:") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -484,7 +498,7 @@ fun QuickRecentsDrawer(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isBookmarked) "Hapus dari Bookmark" else "Tambah ke Bookmark",
+                            text = if (isBookmarked) "Remove from Bookmarks" else "Add to Bookmarks",
                             color = Color(0xFFFFD54F)
                         )
                     }
@@ -492,7 +506,7 @@ fun QuickRecentsDrawer(
             },
             dismissButton = {
                 TextButton(onClick = { selectedAppForMenu = null }) {
-                    Text(text = "Batal")
+                    Text(text = "Cancel")
                 }
             }
         )
@@ -515,9 +529,9 @@ fun QuickRecentsDrawer(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = "Kelola Bookmark", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Manage Bookmarks", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        text = "${bookmarkedPackageNames.size} dipilih",
+                        text = "${bookmarkedPackageNames.size} selected",
                         color = Color(0xFFFFD54F),
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace
@@ -547,23 +561,40 @@ fun QuickRecentsDrawer(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (pickerSearchQuery.isEmpty()) {
-                                Text(
-                                    text = "Cari aplikasi...",
-                                    color = AetherOnSurfaceVariant.copy(alpha = 0.5f),
-                                    fontSize = 12.sp
-                                )
+                        val pickerSearchStyle = TextStyle(
+                            color = AetherOnSurface,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Normal,
+                            fontFamily = FontFamily.Default,
+                            letterSpacing = 0.sp
+                        )
+                        BasicTextField(
+                            value = pickerSearchQuery,
+                            onValueChange = { pickerSearchQuery = it },
+                            singleLine = true,
+                            textStyle = pickerSearchStyle,
+                            cursorBrush = SolidColor(AetherPrimary),
+                            modifier = Modifier.weight(1f),
+                            decorationBox = { innerTextField ->
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (pickerSearchQuery.isEmpty()) {
+                                        Text(
+                                            text = "Search apps...",
+                                            style = pickerSearchStyle.copy(
+                                                color = AetherOnSurfaceVariant.copy(alpha = 0.5f)
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    innerTextField()
+                                }
                             }
-                            BasicTextField(
-                                value = pickerSearchQuery,
-                                onValueChange = { pickerSearchQuery = it },
-                                singleLine = true,
-                                textStyle = TextStyle(color = AetherOnSurface, fontSize = 12.sp),
-                                cursorBrush = SolidColor(AetherPrimary),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                        )
                         if (pickerSearchQuery.isNotEmpty()) {
                             IconButton(
                                 onClick = { pickerSearchQuery = "" },
@@ -682,7 +713,7 @@ fun QuickRecentsDrawer(
             },
             confirmButton = {
                 TextButton(onClick = { isBookmarkPickerOpen = false }) {
-                    Text(text = "Selesai")
+                    Text(text = "Done")
                 }
             }
         )

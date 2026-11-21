@@ -380,26 +380,40 @@ fun FolderPopoverDialog(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Box(modifier = Modifier.weight(1f)) {
-                        if (pickerSearchQuery.isEmpty()) {
-                            Text(
-                                text = "Search apps...",
-                                color = AetherOnSurfaceVariant.copy(alpha = 0.5f),
-                                fontSize = 12.sp
-                            )
+                    val pickerSearchStyle = TextStyle(
+                        color = AetherOnSurface,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        fontWeight = FontWeight.Normal,
+                        fontFamily = FontFamily.Default,
+                        letterSpacing = 0.sp
+                    )
+                    BasicTextField(
+                        value = pickerSearchQuery,
+                        onValueChange = { pickerSearchQuery = it },
+                        singleLine = true,
+                        textStyle = pickerSearchStyle,
+                        cursorBrush = SolidColor(AetherPrimary),
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (pickerSearchQuery.isEmpty()) {
+                                    Text(
+                                        text = "Search apps...",
+                                        style = pickerSearchStyle.copy(
+                                            color = AetherOnSurfaceVariant.copy(alpha = 0.5f)
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                innerTextField()
+                            }
                         }
-                        BasicTextField(
-                            value = pickerSearchQuery,
-                            onValueChange = { pickerSearchQuery = it },
-                            singleLine = true,
-                            textStyle = TextStyle(
-                                color = AetherOnSurface,
-                                fontSize = 12.sp
-                            ),
-                            cursorBrush = SolidColor(AetherPrimary),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                    )
                     if (pickerSearchQuery.isNotEmpty()) {
                         IconButton(
                             onClick = { pickerSearchQuery = "" },

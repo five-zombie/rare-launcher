@@ -77,7 +77,7 @@ fun CommunicationDrawer(
     onRequestContactsPermission: () -> Unit = {}
 ) {
     var contactFilter by remember { mutableStateOf("") }
-    var pendingAction by remember { mutableStateOf<Pair<ContactItem, CommunicationActionType>?>(null) }
+    var pendingAction by remember { mutableStateOf<Pair<ContactItem?, CommunicationActionType>?>(null) }
     val filteredContacts = remember(contacts, contactFilter) {
         if (contactFilter.isBlank()) {
             contacts.take(15)
@@ -190,7 +190,7 @@ fun CommunicationDrawer(
                                             title = "Call",
                                             icon = Icons.Default.Call,
                                             color = AetherPrimary,
-                                            onClick = { onCallClicked(null) },
+                                            onClick = { pendingAction = null to CommunicationActionType.CALL },
                                             modifier = Modifier.weight(1f)
                                         )
                                         // Quick Message
@@ -198,7 +198,7 @@ fun CommunicationDrawer(
                                             title = "Message",
                                             icon = Icons.AutoMirrored.Filled.Message,
                                             color = AetherSecondary,
-                                            onClick = { onMessageClicked(null) },
+                                            onClick = { pendingAction = null to CommunicationActionType.MESSAGE },
                                             modifier = Modifier.weight(1f)
                                         )
                                         // Quick Contacts
@@ -206,7 +206,7 @@ fun CommunicationDrawer(
                                             title = "Contacts",
                                             icon = Icons.Default.Person,
                                             color = Color(0xFFFFB2BA),
-                                            onClick = onContactsClicked,
+                                            onClick = { pendingAction = null to CommunicationActionType.CONTACTS },
                                             modifier = Modifier.weight(1f)
                                         )
                                     }
@@ -240,25 +240,38 @@ fun CommunicationDrawer(
                                             modifier = Modifier.size(16.dp)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
+                                        val searchTextStyle = TextStyle(
+                                            color = AetherOnSurface,
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp,
+                                            fontWeight = FontWeight.Normal,
+                                            fontFamily = FontFamily.Default,
+                                            letterSpacing = 0.sp
+                                        )
                                         BasicTextField(
                                             value = contactFilter,
                                             onValueChange = { contactFilter = it },
                                             singleLine = true,
-                                            textStyle = TextStyle(
-                                                color = AetherOnSurface,
-                                                fontSize = 12.sp
-                                            ),
+                                            textStyle = searchTextStyle,
                                             cursorBrush = SolidColor(AetherPrimary),
-                                            modifier = Modifier.fillMaxWidth(),
+                                            modifier = Modifier.weight(1f),
                                             decorationBox = { innerTextField ->
-                                                if (contactFilter.isEmpty()) {
-                                                    Text(
-                                                        text = "Search by name or number...",
-                                                        color = AetherOnSurfaceVariant.copy(alpha = 0.5f),
-                                                        fontSize = 12.sp
-                                                    )
+                                                Box(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    contentAlignment = Alignment.CenterStart
+                                                ) {
+                                                    if (contactFilter.isEmpty()) {
+                                                        Text(
+                                                            text = "Search by name or number...",
+                                                            style = searchTextStyle.copy(
+                                                                color = AetherOnSurfaceVariant.copy(alpha = 0.5f)
+                                                            ),
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                    innerTextField()
                                                 }
-                                                innerTextField()
                                             }
                                         )
                                     }
@@ -302,7 +315,7 @@ fun CommunicationDrawer(
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Text(
-                                            text = "Izin akses kontak belum diberikan",
+                                            text = "Contacts permission not granted",
                                             color = AetherOnSurfaceVariant,
                                             fontSize = 12.sp
                                         )
@@ -314,7 +327,7 @@ fun CommunicationDrawer(
                                                 .padding(horizontal = 14.dp, vertical = 7.dp)
                                         ) {
                                             Text(
-                                                text = "Izinkan Kontak",
+                                                text = "Allow Contacts",
                                                 color = AetherOnPrimary,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold
@@ -326,9 +339,9 @@ fun CommunicationDrawer(
                                 item {
                                     Text(
                                         text = if (contactFilter.isBlank()) {
-                                            "Tidak ada kontak di perangkat"
+                                            "No contacts on device"
                                         } else {
-                                            "Kontak tidak ditemukan"
+                                            "Contact not found"
                                         },
                                         color = AetherOnSurfaceVariant,
                                         fontSize = 12.sp,
@@ -349,18 +362,18 @@ fun CommunicationDrawer(
                 }
             }
 
-            // Slide-to-Confirm Overlay for Call / Message action
+            // Slide-to-Confirm Overlay for Call / Message / Contacts action
             pendingAction?.let { (contact, actionType) ->
                 SlideToCallOverlay(
                     contact = contact,
                     actionType = actionType,
                     onConfirm = {
-                        val number = contact.phoneNumber
+                        val number = contact?.phoneNumber
                         pendingAction = null
-                        if (actionType == CommunicationActionType.CALL) {
-                            onCallClicked(number)
-                        } else {
-                            onMessageClicked(number)
+                        when (actionType) {
+                            CommunicationActionType.CALL -> onCallClicked(number)
+                            CommunicationActionType.MESSAGE -> onMessageClicked(number)
+                            CommunicationActionType.CONTACTS -> onContactsClicked()
                         }
                     },
                     onDismiss = { pendingAction = null }

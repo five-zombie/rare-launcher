@@ -41,6 +41,9 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         startLockScreenService()
+        if (intent?.getBooleanExtra(EXTRA_OPEN_MUSIC_DRAWER, false) == true) {
+            viewModel.openMusicDrawer()
+        }
         setContent {
             RareLauncerTheme {
                 LauncherScreen(
@@ -55,6 +58,14 @@ class MainActivity : FragmentActivity() {
                     onRequestUsageStatsPermission = { openUsageAccessSettings() },
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_OPEN_MUSIC_DRAWER, false)) {
+            viewModel.openMusicDrawer()
         }
     }
 
@@ -176,10 +187,11 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private companion object {
-        const val NOTIFICATION_PERMISSION_REQUEST = 1001
-        const val PHOTO_PICKER_REQUEST = 1002
-        const val CONTACTS_PERMISSION_REQUEST = 1003
+    companion object {
+        const val EXTRA_OPEN_MUSIC_DRAWER = "extra_open_music_drawer"
+        private const val NOTIFICATION_PERMISSION_REQUEST = 1001
+        private const val PHOTO_PICKER_REQUEST = 1002
+        private const val CONTACTS_PERMISSION_REQUEST = 1003
     }
 
     /** Ensures the lock screen can be displayed above the keyguard on Android 14/15+. */

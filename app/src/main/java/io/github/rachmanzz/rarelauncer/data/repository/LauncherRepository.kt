@@ -1,6 +1,7 @@
 package io.github.rachmanzz.rarelauncer.data.repository
 
 import android.Manifest
+import android.app.ActivityManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -159,9 +160,57 @@ class LauncherRepository(private val context: Context) {
         prefs.edit().putString("recent_apps_list", array.toString()).apply()
     }
 
+    fun killBackgroundApp(packageName: String) {
+        runCatching {
+            val am = context.getSystemService(ActivityManager::class.java)
+            am?.killBackgroundProcesses(packageName)
+        }
+    }
+
+    fun removeRecentApp(packageName: String): List<String> {
+        killBackgroundApp(packageName)
+        markRecentAppDismissed(packageName)
+        val updated = getRecentApps().filter { it != packageName }
+        val array = JSONArray()
+        updated.forEach { array.put(it) }
+        prefs.edit().putString("recent_apps_list", array.toString()).apply()
+        return updated
+    }
+
+    fun clearAllRecentApps(packages: List<String>) {
+        packages.forEach { pkg ->
+            killBackgroundApp(pkg)
+            markRecentAppDismissed(pkg)
+        }
+        prefs.edit().putString("recent_apps_list", "[]").apply()
+    }
+
+    private fun markRecentAppDismissed(packageName: String) {
+        val map = getDismissedRecentTimestamps().toMutableMap()
+        map[packageName] = System.currentTimeMillis()
+        val obj = JSONObject()
+        map.forEach { (k, v) -> obj.put(k, v) }
+        prefs.edit().putString("dismissed_recent_timestamps", obj.toString()).apply()
+    }
+
+    private fun getDismissedRecentTimestamps(): Map<String, Long> {
+        val raw = prefs.getString("dismissed_recent_timestamps", null) ?: return emptyMap()
+        return runCatching {
+            val obj = JSONObject(raw)
+            val result = mutableMapOf<String, Long>()
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                result[key] = obj.optLong(key, 0L)
+            }
+            result
+        }.getOrDefault(emptyMap())
+    }
+
     fun getMostRecentForegroundPackage(): String? {
         val usageStatsManager = context.getSystemService(UsageStatsManager::class.java) ?: return null
         val now = System.currentTimeMillis()
+        val dismissedTimestamps = getDismissedRecentTimestamps()
         val events = runCatching {
             usageStatsManager.queryEvents(now - 1000L * 60 * 30, now) // check last 30 minutes
         }.getOrNull() ?: return null
@@ -182,7 +231,8 @@ class LauncherRepository(private val context: Context) {
             if (event.eventType == resumedEventType &&
                 !event.packageName.isNullOrEmpty() &&
                 event.packageName != context.packageName &&
-                event.timeStamp > lastTime
+                event.timeStamp > lastTime &&
+                event.timeStamp > (dismissedTimestamps[event.packageName] ?: 0L)
             ) {
                 if (packageManager.getLaunchIntentForPackage(event.packageName) != null) {
                     lastPkg = event.packageName
